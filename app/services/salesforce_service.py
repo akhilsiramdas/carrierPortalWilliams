@@ -12,6 +12,13 @@ from typing import Dict, List, Optional, Any
 
 logger = logging.getLogger(__name__)
 
+def escape_soql(value: str) -> str:
+    """Sanitizes a string for use in a SOQL query to prevent SOQL injection."""
+    if value is None:
+        return "NULL"
+    # Escape single quotes and backslashes
+    return str(value).replace('\\', '\\\\').replace('\'', '\\\'')
+
 class TFST_SalesforceService:
     """
     Service class for Salesforce integration
@@ -67,7 +74,7 @@ class TFST_SalesforceService:
             'response_type': 'code',
             'client_id': current_app.config['SALESFORCE_CLIENT_ID'],
             'redirect_uri': current_app.config['SALESFORCE_REDIRECT_URI'],
-            'scope': 'api id profile email address phone'
+            'scope': 'api id profile email address phone offline_access'
         }
         
         if state:
@@ -99,6 +106,29 @@ class TFST_SalesforceService:
         except requests.exceptions.RequestException as e:
             logger.error(f"Token exchange failed: {str(e)}")
             raise
+
+    def refresh_access_token(self, refresh_token: str) -> Dict[str, Any]:
+        """
+        Refresh access token using refresh token
+        """
+        token_url = f"{current_app.config['SALESFORCE_LOGIN_URL']}/services/oauth2/token"
+
+        data = {
+            'grant_type': 'refresh_token',
+            'client_id': current_app.config['SALESFORCE_CLIENT_ID'],
+            'client_secret': current_app.config['SALESFORCE_CLIENT_SECRET'],
+            'refresh_token': refresh_token
+        }
+
+        try:
+            response = requests.post(token_url, data=data)
+            response.raise_for_status()
+            # Note: A new refresh token is NOT issued in this response
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Token refresh failed: {str(e)}")
+            # If refresh fails, the user might need to log in again
+            raise
     
     def get_user_info(self, access_token: str, instance_url: str) -> Dict[str, Any]:
         """
@@ -119,34 +149,6 @@ class TFST_SalesforceService:
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to get user info: {str(e)}")
             raise
-    
-    # def get_carrier_info(self, user_id: str) -> Optional[Dict[str, Any]]:
-    #     """
-    #     Get carrier information for a specific user from TFST_Master_Carrier
-    #     """
-    #     try:
-    #         # Query to find carrier associated with this user
-    #         query = f"""
-    #             SELECT Id, Name, TFST_Contact_Person__c, TFST_Email__c, TFST_Contact_Number__c,
-    #                    TFST_Service_Types__c, TFST_Reliability_Score__c, Is_Active__c
-    #             FROM TFST_Master_Carrier__c 
-    #             WHERE TFST_Contact_Person__c = '{user_id}' 
-    #                OR TFST_Email__c IN (SELECT Email FROM User WHERE Id = '{user_id}')
-    #             LIMIT 1
-    #         """
-
-        
-    #         result = self.sf.query(query)
-            
-    #         if result['totalSize'] > 0:
-    #             return result['records'][0]
-    #         return None
-            
-    #     except Exception as e:
-    #         logger.error(f"Failed to get carrier info for user {user_id}: {str(e)}")
-    #         return None
-
-    # option 22222222
 
     def get_carrier_info(self, user_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -157,18 +159,14 @@ class TFST_SalesforceService:
             self._initialize_connection()
             
             if not self.sf:
-                logger.warning("Salesforce not connected, returning mock carrier data")
-                # Return mock data for testing
-                return {
-                    'Id': 'mock_carrier_123',
-                    'Name': 'Mock Test Carrier',
-                    'TFST_Contact_Person__c': user_id,
-                    'TFST_Email__c': 'mock@carrier.com',
-                    'Is_Active__c': True
-                }
+                logger.error("Salesforce connection not available.")
+                return None
+
+            # Sanitize input to prevent SOQL injection
+            safe_user_id = escape_soql(user_id)
             
             # First get the user's email from Salesforce
-            user_query = f"SELECT Email FROM User WHERE Id = '{user_id}' LIMIT 1"
+            user_query = f"SELECT Email FROM User WHERE Id = '{safe_user_id}' LIMIT 1"
             user_result = self.sf.query(user_query)
             
             if user_result['totalSize'] == 0:
@@ -176,13 +174,14 @@ class TFST_SalesforceService:
                 return None
                 
             user_email = user_result['records'][0]['Email']
+            safe_user_email = escape_soql(user_email)
             
             # Then query carrier by email
             carrier_query = f"""
                 SELECT Id, Name, TFST_Contact_Person__c, TFST_Email__c, TFST_Contact_Number__c,
                     TFST_Service_Types__c, TFST_Reliability_Score__c, Is_Active__c
                 FROM TFST_Master_Carrier__c 
-                WHERE TFST_Email__c = '{user_email}'
+                WHERE TFST_Email__c = '{safe_user_email}'
                 LIMIT 1
             """
             
@@ -195,11 +194,60 @@ class TFST_SalesforceService:
         except Exception as e:
             logger.error(f"Failed to get carrier info for user {user_id}: {str(e)}")
             return None
+    def get_user_by_id(self, user_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get portal user information from Salesforce by Salesforce User ID
+        """
+        self._initialize_connection()
+        try:
+            # This assumes you have a custom object `Portal_User__c` with an external ID field `Salesforce_User_Id__c`
+            result = self.sf.Portal_User__c.get_by_custom_id('Salesforce_User_Id__c', user_id)
+            return result
+        except Exception as e:
+            logger.error(f"Failed to get portal user by id {user_id}: {str(e)}")
+            return None
+
+    def create_or_update_user(self, user_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Create or update a portal user in Salesforce.
+        This uses the `upsert` method with an external ID field.
+        """
+        self._initialize_connection()
+        salesforce_user_id = user_data.get('salesforce_user_id')
+        if not salesforce_user_id:
+            raise ValueError("salesforce_user_id is required for upsert")
+
+        # Map application user data to Salesforce custom object fields
+        sf_data = {
+            'Carrier_Id__c': user_data.get('carrier_id'),
+            'Email__c': user_data.get('email'),
+            'Name__c': user_data.get('name'),
+            'Company_Name__c': user_data.get('company_name'),
+            'Phone_Number__c': user_data.get('phone_number'),
+            'Can_Update_Shipments__c': user_data.get('can_update_shipments', False),
+            'Can_Upload_Documents__c': user_data.get('can_upload_documents', False),
+            'Can_View_Analytics__c': user_data.get('can_view_analytics', False),
+            'Last_Login__c': user_data.get('last_login'),
+            'Is_Active__c': user_data.get('is_active', True)
+        }
+
+        try:
+            # Upsert user data based on the external ID `Salesforce_User_Id__c`
+            result = self.sf.Portal_User__c.upsert(f'Salesforce_User_Id__c/{salesforce_user_id}', sf_data)
+            logger.info(f"Upserted portal user {salesforce_user_id}. Status: {result}")
+
+            # After upserting, fetch the full record to return it, ensuring consistency
+            return self.get_user_by_id(salesforce_user_id)
+        except Exception as e:
+            logger.error(f"Failed to upsert portal user {salesforce_user_id}: {str(e)}")
+            raise
+
     def get_carrier_shipments(self, carrier_id: str, limit: int = 100) -> List[Dict[str, Any]]:
         """
         Get shipments assigned to a specific carrier
         """
         try:
+            safe_carrier_id = escape_soql(carrier_id)
             query = f"""
                 SELECT Id, Name, TFST_Shipment_Type__c, TFST_Status__c, TFST_Carrier__c,
                        TFST_Current_Coordinates__c, TFST_Driver_Name__c, TFST_Driver_Phone__c,
@@ -207,7 +255,7 @@ class TFST_SalesforceService:
                        Required_Delivery_Date__c, TFST_Total_Weight__c, TFST_Total_Volume__c,
                        TFST_Service_Level__c, TFST_Current_Speed__c, TFST_GPS_Enabled__c
                 FROM TFST_Shipment__c
-                WHERE TFST_Carrier__c = '{carrier_id}'
+                WHERE TFST_Carrier__c = '{safe_carrier_id}'
                    AND TFST_Status__c NOT IN ('Delivered', 'Cancelled')
                 ORDER BY TFST_Predicted_Delivery_Date__c ASC
                 LIMIT {limit}
@@ -225,6 +273,7 @@ class TFST_SalesforceService:
         Get detailed information for a specific shipment
         """
         try:
+            safe_shipment_id = escape_soql(shipment_id)
             query = f"""
                 SELECT Id, Name, TFST_Shipment_Type__c, TFST_Status__c, TFST_Carrier__c,
                        TFST_Current_Coordinates__c, TFST_Driver_Name__c, TFST_Driver_Phone__c,
@@ -234,7 +283,7 @@ class TFST_SalesforceService:
                        Special_Instructions__c, TFST_Transportation_Request__c,
                        TFST_Quote_Request__c, TFST_Service_Order_Number__c
                 FROM TFST_Shipment__c
-                WHERE Id = '{shipment_id}' OR Name = '{shipment_id}'
+                WHERE Id = '{safe_shipment_id}' OR Name = '{safe_shipment_id}'
                 LIMIT 1
             """
             
@@ -294,6 +343,7 @@ class TFST_SalesforceService:
         Get shipment stages for tracking
         """
         try:
+            safe_shipment_id = escape_soql(shipment_id)
             query = f"""
                 SELECT Id, TFST_Shipment__c, TFST_Stage_Number__c, TFST_Stage_Type__c,
                        TFST_Status__c, TFST_Pickup_Location_Name__c, TFST_Delivery_Location_Name__c,
@@ -301,7 +351,7 @@ class TFST_SalesforceService:
                        TFST_Actual_Start__c, TFST_Actual_End__c,
                        TFST_Carrier__c, TFST_Equipment_Type__c
                 FROM TFST_Shipment_Stage__c
-                WHERE TFST_Shipment__c = '{shipment_id}'
+                WHERE TFST_Shipment__c = '{safe_shipment_id}'
                 ORDER BY TFST_Stage_Number__c ASC
             """
             
@@ -345,13 +395,14 @@ class TFST_SalesforceService:
         try:
             # Calculate date range
             start_date = (datetime.utcnow() - timedelta(days=days)).date().isoformat()
+            safe_carrier_id = escape_soql(carrier_id)
             
             # Query for completed shipments
             query = f"""
                 SELECT COUNT() total_shipments,
                        COUNT_DISTINCT(Id) delivered_shipments
                 FROM TFST_Shipment__c
-                WHERE TFST_Carrier__c = '{carrier_id}'
+                WHERE TFST_Carrier__c = '{safe_carrier_id}'
                    AND CreatedDate >= {start_date}
             """
             

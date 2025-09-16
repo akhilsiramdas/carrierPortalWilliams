@@ -3,6 +3,8 @@ from flask_login import LoginManager
 import logging
 from config.config import Config
 import os
+from flask_session import Session
+import redis
 
 # Setup login manager
 login_manager = LoginManager()
@@ -15,7 +17,15 @@ def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
     
-    # Initialize login manager
+    # Configure session to use Redis
+    app.config['SESSION_TYPE'] = 'redis'
+    if app.config.get('REDIS_URL'):
+        app.config['SESSION_PERMANENT'] = False
+        app.config['SESSION_USE_SIGNER'] = True
+        app.config['SESSION_REDIS'] = redis.from_url(app.config['REDIS_URL'])
+
+    # Initialize extensions
+    Session(app)
     login_manager.init_app(app)
     
     # Register blueprints

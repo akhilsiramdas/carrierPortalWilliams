@@ -9,6 +9,7 @@ from app.services.salesforce_service import salesforce_service
 from app.services.firebase_service import firebase_service
 # from app.services.s3_service import s3_service
 from app.utils.helpers import allowed_file, validate_file_upload
+from app.utils.decorators import salesforce_token_required
 from datetime import datetime, timezone
 import logging
 import os
@@ -18,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 @shipments_bp.route('/')
 @login_required
+@salesforce_token_required
 def index():
     """Display all carrier shipments"""
     try:
@@ -85,6 +87,7 @@ def index():
 
 @shipments_bp.route('/<shipment_id>')
 @login_required
+@salesforce_token_required
 def detail(shipment_id):
     """Display detailed shipment information"""
     try:
@@ -129,6 +132,7 @@ def detail(shipment_id):
 
 @shipments_bp.route('/<shipment_id>/update-status', methods=['POST'])
 @login_required
+@salesforce_token_required
 def update_status(shipment_id):
     """Update shipment status"""
     if not current_user.can_update_shipments:
@@ -201,6 +205,7 @@ def update_status(shipment_id):
 
 @shipments_bp.route('/<shipment_id>/upload-document', methods=['POST'])
 @login_required
+@salesforce_token_required
 def upload_document(shipment_id):
     """Upload document/photo for shipment"""
     if not current_user.can_upload_documents:
@@ -252,6 +257,7 @@ def upload_document(shipment_id):
 
 @shipments_bp.route('/<shipment_id>/documents')
 @login_required
+@salesforce_token_required
 def get_documents(shipment_id):
     """Get documents for a shipment"""
     try:
@@ -276,6 +282,7 @@ def get_documents(shipment_id):
 
 @shipments_bp.route('/<shipment_id>/tracking-history')
 @login_required
+@salesforce_token_required
 def get_tracking_history(shipment_id):
     """Get tracking history for a shipment"""
     try:
@@ -432,6 +439,7 @@ def get_valid_statuses():
 
 @shipments_bp.route('/api/search')
 @login_required
+@salesforce_token_required
 def search_shipments():
     """API endpoint for shipment search"""
     try:
