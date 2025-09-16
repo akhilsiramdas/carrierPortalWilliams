@@ -1,0 +1,724 @@
+{% extends "base.html" %}
+
+{% block title %}Live Map - TFST Carrier Portal{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <h1 class="h3 text-dark mb-1">Live Shipment Tracking</h1>
+        <p class="text-muted">Real-time GPS locations of your active shipments</p>
+    </div>
+    <div class="col-md-4 text-md-end">
+        <div class="btn-group" role="group">
+            <button type="button" class="btn btn-outline-primary" id="refreshMapBtn">
+                <i class="fas fa-sync-alt me-1"></i>Refresh
+            </button>
+            <button type="button" class="btn btn-outline-info" id="centerMapBtn">
+                <i class="fas fa-crosshairs me-1"></i>Center All
+            </button>
+            <div class="dropdown">
+                <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                    <i class="fas fa-filter me-1"></i>Filter
+                </button>
+                <ul class="dropdown-menu">
+                    <li><a class="dropdown-item filter-status" href="#" data-status="">All Statuses</a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item filter-status" href="#" data-status="In Transit">In Transit</a></li>
+                    <li><a class="dropdown-item filter-status" href="#" data-status="Dispatched">Dispatched</a></li>
+                    <li><a class="dropdown-item filter-status" href="#" data-status="At pickup site">At Pickup</a></li>
+                    <li><a class="dropdown-item filter-status" href="#" data-status="Arrived at site">At Delivery</a></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Map Controls and Info -->
+<div class="row mb-3">
+    <div class="col-lg-9">
+        <div class="card">
+            <div class="card-body p-2">
+                <div class="row align-items-center">
+                    <div class="col-md-4">
+                        <div class="d-flex align-items-center">
+                            <span class="badge bg-success me-2">{{ shipments|selectattr('status', 'equalto', 'In Transit')|list|length }}</span>
+                            <small class="text-muted">In Transit</small>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="d-flex align-items-center">
+                            <span class="badge bg-primary me-2">{{ shipments|selectattr('location')|list|length }}</span>
+                            <small class="text-muted">With GPS Data</small>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="d-flex align-items-center">
+                            <span class="badge bg-warning me-2" id="selectedShipmentsCount">0</span>
+                            <small class="text-muted">Selected</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3">
+        <div class="card">
+            <div class="card-body p-2 text-center">
+                <small class="text-muted">Last Updated</small><br>
+                <strong id="lastUpdateTime">{{ moment().format('HH:mm:ss') }}</strong>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Map and Shipment List -->
+<div class="row">
+    <!-- Main Map -->
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-body p-0">
+                <div id="shipmentMap" style="height: 600px; position: relative;">
+                    <div class="map-loading d-flex align-items-center justify-content-center h-100" style="background: #f8f9fa;">
+                        <div class="text-center">
+                            <div class="spinner-border text-primary mb-3" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="text-muted">Loading map...</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Map Legend -->
+                <div class="position-absolute" style="top: 10px; right: 10px; z-index: 1000;">
+                    <div class="card" style="min-width: 200px;">
+                        <div class="card-body p-3">
+                            <h6 class="card-title mb-2">Legend</h6>
+                            <div class="legend-item d-flex align-items-center mb-2">
+                                <div class="legend-marker bg-success me-2" style="width: 12px; height: 12px; border-radius: 50%;"></div>
+                                <small>In Transit</small>
+                            </div>
+                            <div class="legend-item d-flex align-items-center mb-2">
+                                <div class="legend-marker bg-primary me-2" style="width: 12px; height: 12px; border-radius: 50%;"></div>
+                                <small>Dispatched</small>
+                            </div>
+                            <div class="legend-item d-flex align-items-center mb-2">
+                                <div class="legend-marker bg-warning me-2" style="width: 12px; height: 12px; border-radius: 50%;"></div>
+                                <small>At Pickup/Delivery</small>
+                            </div>
+                            <div class="legend-item d-flex align-items-center">
+                                <div class="legend-marker bg-danger me-2" style="width: 12px; height: 12px; border-radius: 50%;"></div>
+                                <small>Delayed</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Shipment List Sidebar -->
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-list me-2"></i>Active Shipments
+                    <span class="badge bg-primary ms-2" id="shipmentsCount">{{ shipments|length }}</span>
+                </h5>
+            </div>
+            <div class="card-body p-0" style="max-height: 600px; overflow-y: auto;">
+                <div id="shipmentsList">
+                    {% if shipments %}
+                    {% for shipment in shipments %}
+                    <div class="shipment-item p-3 border-bottom" 
+                         data-shipment-id="{{ shipment.shipment_id }}" 
+                         data-status="{{ shipment.current_status or 'Unknown' }}"
+                         data-lat="{{ shipment.location.lat if shipment.location else '' }}"
+                         data-lng="{{ shipment.location.lng if shipment.location else '' }}">
+                        
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div class="flex-grow-1">
+                                <h6 class="mb-1">
+                                    <a href="#" class="text-decoration-none shipment-link" 
+                                       data-shipment-id="{{ shipment.shipment_id }}">
+                                        {{ shipment.shipment_id }}
+                                    </a>
+                                    {% if shipment.location %}
+                                    <i class="fas fa-satellite text-success ms-2" title="GPS Active"></i>
+                                    {% else %}
+                                    <i class="fas fa-satellite text-muted ms-2" title="No GPS Data"></i>
+                                    {% endif %}
+                                </h6>
+                                <span class="badge status-badge status-{{ shipment.current_status.lower().replace(' ', '-') if shipment.current_status else 'unknown' }}">
+                                    {{ shipment.current_status or 'Unknown' }}
+                                </span>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input shipment-checkbox" type="checkbox" 
+                                       value="{{ shipment.shipment_id }}" 
+                                       id="check_{{ shipment.shipment_id }}">
+                            </div>
+                        </div>
+                        
+                        {% if shipment.driver_info and shipment.driver_info.name %}
+                        <div class="driver-info mb-2">
+                            <small class="text-muted">
+                                <i class="fas fa-user me-1"></i>{{ shipment.driver_info.name }}
+                                {% if shipment.driver_info.truck_number %}
+                                | <i class="fas fa-truck me-1"></i>{{ shipment.driver_info.truck_number }}
+                                {% endif %}
+                            </small>
+                        </div>
+                        {% endif %}
+                        
+                        {% if shipment.location %}
+                        <div class="location-info mb-2">
+                            <small class="text-muted">
+                                <i class="fas fa-map-marker-alt me-1"></i>
+                                {{ shipment.location.lat|round(4) }}, {{ shipment.location.lng|round(4) }}
+                            </small>
+                        </div>
+                        {% endif %}
+                        
+                        {% if shipment.last_updated %}
+                        <div class="update-time">
+                            <small class="text-muted">
+                                <i class="fas fa-clock me-1"></i>
+                                Updated {{ moment(shipment.last_updated).fromNow() }}
+                            </small>
+                        </div>
+                        {% endif %}
+                        
+                        <div class="mt-2">
+                            <div class="btn-group btn-group-sm" role="group">
+                                <button type="button" class="btn btn-outline-primary btn-sm" 
+                                        onclick="centerOnShipment('{{ shipment.shipment_id }}')">
+                                    <i class="fas fa-crosshairs"></i>
+                                </button>
+                                <button type="button" class="btn btn-outline-info btn-sm" 
+                                        onclick="showShipmentDetails('{{ shipment.shipment_id }}')">
+                                    <i class="fas fa-info"></i>
+                                </button>
+                                {% if shipment.location %}
+                                <button type="button" class="btn btn-outline-success btn-sm" 
+                                        onclick="trackShipment('{{ shipment.shipment_id }}')">
+                                    <i class="fas fa-route"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-map-marked-alt fa-3x text-muted mb-3"></i>
+                        <h5 class="text-muted">No Active Shipments</h5>
+                        <p class="text-muted">Shipments with GPS tracking will appear here</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Shipment Details Modal -->
+<div class="modal fade" id="shipmentDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Shipment Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="shipmentDetailsContent">
+                    <!-- Content will be loaded dynamically -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <a href="#" class="btn btn-primary" id="viewFullDetailsBtn">View Full Details</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bulk Actions Panel (Hidden by default) -->
+<div class="position-fixed bottom-0 start-50 translate-middle-x mb-3" style="z-index: 1000;">
+    <div class="card shadow" id="bulkActionsPanel" style="display: none;">
+        <div class="card-body py-2 px-3">
+            <div class="row align-items-center">
+                <div class="col-auto">
+                    <span id="selectedCount">0</span> shipments selected
+                </div>
+                <div class="col-auto">
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button type="button" class="btn btn-primary" id="bulkUpdateStatusBtn">
+                            <i class="fas fa-edit me-1"></i>Update Status
+                        </button>
+                        <button type="button" class="btn btn-outline-info" id="bulkCenterBtn">
+                            <i class="fas fa-eye me-1"></i>View All
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" id="bulkClearBtn">
+                            <i class="fas fa-times me-1"></i>Clear
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.shipment-item {
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.shipment-item:hover {
+    background-color: #f8f9fa;
+}
+
+.shipment-item.selected {
+    background-color: #e3f2fd;
+    border-left: 4px solid #2196f3;
+}
+
+.map-loading {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10;
+}
+
+.legend-marker {
+    border: 2px solid #fff;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
+#bulkActionsPanel {
+    transition: all 0.3s ease;
+    min-width: 300px;
+}
+
+.shipment-link:hover {
+    text-decoration: underline !important;
+}
+
+.status-in-transit { background-color: #28a745; }
+.status-dispatched { background-color: #007bff; }
+.status-at-pickup-site,
+.status-arrived-at-site { background-color: #ffc107; color: #000; }
+.status-delayed { background-color: #dc3545; }
+.status-delivered { background-color: #17a2b8; }
+.status-unknown { background-color: #6c757d; }
+
+.btn-group-sm .btn {
+    padding: 0.2rem 0.4rem;
+    font-size: 0.75rem;
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
+<!-- Google Maps API -->
+<script async defer src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&callback=initMap"></script>
+
+<script>
+let map;
+let markers = {};
+let infoWindows = {};
+let selectedShipments = new Set();
+let shipmentsData = {{ shipments | tojson }};
+
+$(document).ready(function() {
+    // Initialize real-time updates
+    initializeRealtimeUpdates();
+    
+    // Checkbox handling
+    $('.shipment-checkbox').change(function() {
+        const shipmentId = this.value;
+        const isChecked = this.checked;
+        
+        if (isChecked) {
+            selectedShipments.add(shipmentId);
+            $(this).closest('.shipment-item').addClass('selected');
+        } else {
+            selectedShipments.delete(shipmentId);
+            $(this).closest('.shipment-item').removeClass('selected');
+        }
+        
+        updateBulkActions();
+        updateMarkerSelection();
+    });
+    
+    // Shipment item click (except checkbox)
+    $('.shipment-item').click(function(e) {
+        if (!$(e.target).is('.form-check-input')) {
+            const shipmentId = $(this).data('shipment-id');
+            centerOnShipment(shipmentId);
+        }
+    });
+    
+    // Filter buttons
+    $('.filter-status').click(function(e) {
+        e.preventDefault();
+        const status = $(this).data('status');
+        filterShipmentsByStatus(status);
+    });
+    
+    // Control buttons
+    $('#refreshMapBtn').click(refreshMapData);
+    $('#centerMapBtn').click(centerAllShipments);
+    $('#bulkClearBtn').click(clearAllSelections);
+    $('#bulkCenterBtn').click(centerSelectedShipments);
+    $('#bulkUpdateStatusBtn').click(showBulkUpdateModal);
+    
+    // Update time every second
+    setInterval(updateTime, 1000);
+    
+    // Auto-refresh every 30 seconds
+    setInterval(refreshMapData, 30000);
+});
+
+function initMap() {
+    $('.map-loading').hide();
+    
+    // Initialize map centered on US
+    map = new google.maps.Map(document.getElementById('shipmentMap'), {
+        zoom: 4,
+        center: { lat: 39.8283, lng: -98.5795 }, // Center of US
+        mapTypeControl: true,
+        streetViewControl: false,
+        fullscreenControl: true
+    });
+    
+    // Add shipment markers
+    addShipmentMarkers();
+    
+    // Fit map to show all markers
+    centerAllShipments();
+}
+
+function addShipmentMarkers() {
+    shipmentsData.forEach(shipment => {
+        if (shipment.location && shipment.location.lat && shipment.location.lng) {
+            addShipmentMarker(shipment);
+        }
+    });
+}
+
+function addShipmentMarker(shipment) {
+    const position = {
+        lat: parseFloat(shipment.location.lat),
+        lng: parseFloat(shipment.location.lng)
+    };
+    
+    const markerColor = getMarkerColor(shipment.current_status);
+    
+    const marker = new google.maps.Marker({
+        position: position,
+        map: map,
+        title: shipment.shipment_id,
+        icon: {
+            url: `https://maps.google.com/mapfiles/ms/icons/${markerColor}-dot.png`,
+            scaledSize: new google.maps.Size(32, 32)
+        },
+        shipmentId: shipment.shipment_id
+    });
+    
+    const infoWindow = new google.maps.InfoWindow({
+        content: createInfoWindowContent(shipment)
+    });
+    
+    marker.addListener('click', () => {
+        // Close all other info windows
+        Object.values(infoWindows).forEach(iw => iw.close());
+        infoWindow.open(map, marker);
+    });
+    
+    markers[shipment.shipment_id] = marker;
+    infoWindows[shipment.shipment_id] = infoWindow;
+}
+
+function createInfoWindowContent(shipment) {
+    const driverInfo = shipment.driver_info ? 
+        `<strong>Driver:</strong> ${shipment.driver_info.name}<br>` : '';
+    
+    const lastUpdate = shipment.last_updated ? 
+        `<strong>Updated:</strong> ${moment(shipment.last_updated).fromNow()}<br>` : '';
+    
+    return `
+        <div style="min-width: 200px;">
+            <h6>${shipment.shipment_id}</h6>
+            <span class="badge status-badge status-${shipment.current_status.toLowerCase().replace(' ', '-')}">${shipment.current_status}</span><br><br>
+            ${driverInfo}
+            ${lastUpdate}
+            <strong>Location:</strong> ${shipment.location.lat.toFixed(4)}, ${shipment.location.lng.toFixed(4)}<br>
+            <div class="mt-2">
+                <button class="btn btn-sm btn-primary" onclick="showShipmentDetails('${shipment.shipment_id}')">
+                    View Details
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+function getMarkerColor(status) {
+    const colorMap = {
+        'In Transit': 'green',
+        'Dispatched': 'blue',
+        'At pickup site': 'yellow',
+        'Arrived at site': 'yellow',
+        'Delayed': 'red',
+        'Delivered': 'ltblue'
+    };
+    return colorMap[status] || 'purple';
+}
+
+function centerOnShipment(shipmentId) {
+    const marker = markers[shipmentId];
+    if (marker) {
+        map.setCenter(marker.getPosition());
+        map.setZoom(15);
+        
+        // Open info window
+        Object.values(infoWindows).forEach(iw => iw.close());
+        infoWindows[shipmentId].open(map, marker);
+        
+        // Highlight shipment in list
+        $('.shipment-item').removeClass('bg-light');
+        $(`.shipment-item[data-shipment-id="${shipmentId}"]`).addClass('bg-light');
+    }
+}
+
+function centerAllShipments() {
+    const bounds = new google.maps.LatLngBounds();
+    let hasMarkers = false;
+    
+    Object.values(markers).forEach(marker => {
+        bounds.extend(marker.getPosition());
+        hasMarkers = true;
+    });
+    
+    if (hasMarkers) {
+        map.fitBounds(bounds);
+        
+        // Ensure minimum zoom level
+        google.maps.event.addListenerOnce(map, 'bounds_changed', function() {
+            if (map.getZoom() > 15) {
+                map.setZoom(15);
+            }
+        });
+    }
+}
+
+function centerSelectedShipments() {
+    if (selectedShipments.size === 0) return;
+    
+    const bounds = new google.maps.LatLngBounds();
+    let hasMarkers = false;
+    
+    selectedShipments.forEach(shipmentId => {
+        const marker = markers[shipmentId];
+        if (marker) {
+            bounds.extend(marker.getPosition());
+            hasMarkers = true;
+        }
+    });
+    
+    if (hasMarkers) {
+        map.fitBounds(bounds);
+    }
+}
+
+function filterShipmentsByStatus(status) {
+    $('.shipment-item').each(function() {
+        const itemStatus = $(this).data('status');
+        
+        if (!status || itemStatus === status) {
+            $(this).show();
+        } else {
+            $(this).hide();
+        }
+    });
+    
+    // Update markers visibility
+    Object.entries(markers).forEach(([shipmentId, marker]) => {
+        const shipment = shipmentsData.find(s => s.shipment_id === shipmentId);
+        const shouldShow = !status || shipment.current_status === status;
+        marker.setVisible(shouldShow);
+    });
+    
+    // Update counter
+    const visibleCount = $('.shipment-item:visible').length;
+    $('#shipmentsCount').text(visibleCount);
+}
+
+function updateBulkActions() {
+    const count = selectedShipments.size;
+    $('#selectedCount').text(count);
+    $('#selectedShipmentsCount').text(count);
+    
+    if (count > 0) {
+        $('#bulkActionsPanel').slideDown();
+    } else {
+        $('#bulkActionsPanel').slideUp();
+    }
+}
+
+function updateMarkerSelection() {
+    Object.entries(markers).forEach(([shipmentId, marker]) => {
+        const isSelected = selectedShipments.has(shipmentId);
+        
+        if (isSelected) {
+            // Make marker larger or different color when selected
+            marker.setIcon({
+                url: marker.getIcon().url,
+                scaledSize: new google.maps.Size(40, 40)
+            });
+        } else {
+            marker.setIcon({
+                url: marker.getIcon().url,
+                scaledSize: new google.maps.Size(32, 32)
+            });
+        }
+    });
+}
+
+function clearAllSelections() {
+    selectedShipments.clear();
+    $('.shipment-checkbox').prop('checked', false);
+    $('.shipment-item').removeClass('selected');
+    updateBulkActions();
+    updateMarkerSelection();
+}
+
+function showShipmentDetails(shipmentId) {
+    // Load shipment details via AJAX
+    TFST.showLoading();
+    
+    $.get(`/shipments/${shipmentId}`)
+        .done(function(data) {
+            // Redirect to detail page
+            window.location.href = `/shipments/${shipmentId}`;
+        })
+        .fail(function() {
+            TFST.hideLoading();
+            TFST.showAlert('Failed to load shipment details', 'danger');
+        });
+}
+
+function trackShipment(shipmentId) {
+    centerOnShipment(shipmentId);
+    
+    // Could implement route tracking here
+    const shipment = shipmentsData.find(s => s.shipment_id === shipmentId);
+    if (shipment && shipment.location) {
+        TFST.showAlert(`Tracking ${shipmentId} at ${shipment.location.lat.toFixed(4)}, ${shipment.location.lng.toFixed(4)}`, 'info');
+    }
+}
+
+function refreshMapData() {
+    $.get('/api/v1/shipments', { format: 'map' })
+        .done(function(response) {
+            if (response.success) {
+                updateShipmentsData(response.data);
+                $('#lastUpdateTime').text(moment().format('HH:mm:ss'));
+            }
+        })
+        .fail(function() {
+            console.log('Failed to refresh map data');
+        });
+}
+
+function updateShipmentsData(newData) {
+    // Update shipments data and markers
+    shipmentsData = newData;
+    
+    // Clear existing markers
+    Object.values(markers).forEach(marker => marker.setMap(null));
+    Object.values(infoWindows).forEach(iw => iw.close());
+    markers = {};
+    infoWindows = {};
+    
+    // Add new markers
+    addShipmentMarkers();
+    
+    // Update shipments list
+    updateShipmentsList();
+}
+
+function updateShipmentsList() {
+    // This would update the sidebar list with new data
+    // For now, we'll just reload the page section
+    console.log('Shipments list updated');
+}
+
+function initializeRealtimeUpdates() {
+    if (typeof io !== 'undefined') {
+        const socket = io();
+        
+        socket.on('shipment_location_update', function(data) {
+            updateShipmentLocation(data.shipment_id, data.location);
+        });
+        
+        socket.on('shipment_status_update', function(data) {
+            updateShipmentStatus(data.shipment_id, data.status);
+        });
+    }
+}
+
+function updateShipmentLocation(shipmentId, location) {
+    const marker = markers[shipmentId];
+    if (marker) {
+        const newPosition = { lat: location.lat, lng: location.lng };
+        marker.setPosition(newPosition);
+        
+        // Update info window content
+        const shipment = shipmentsData.find(s => s.shipment_id === shipmentId);
+        if (shipment) {
+            shipment.location = location;
+            infoWindows[shipmentId].setContent(createInfoWindowContent(shipment));
+        }
+    }
+}
+
+function updateShipmentStatus(shipmentId, status) {
+    const marker = markers[shipmentId];
+    if (marker) {
+        const newColor = getMarkerColor(status);
+        marker.setIcon({
+            url: `https://maps.google.com/mapfiles/ms/icons/${newColor}-dot.png`,
+            scaledSize: new google.maps.Size(32, 32)
+        });
+        
+        // Update shipment data
+        const shipment = shipmentsData.find(s => s.shipment_id === shipmentId);
+        if (shipment) {
+            shipment.current_status = status;
+            infoWindows[shipmentId].setContent(createInfoWindowContent(shipment));
+        }
+    }
+}
+
+function updateTime() {
+    $('#lastUpdateTime').text(moment().format('HH:mm:ss'));
+}
+
+function showBulkUpdateModal() {
+    if (selectedShipments.size === 0) {
+        TFST.showAlert('Please select shipments to update', 'warning');
+        return;
+    }
+    
+    // This would show a bulk update modal
+    // For now, just show a message
+    TFST.showAlert(`Bulk update for ${selectedShipments.size} shipments would be implemented here`, 'info');
+}
+</script>
+{% endblock %}

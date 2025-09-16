@@ -1,0 +1,757 @@
+<div class="row mb-4">
+    <div class="col-md-8">
+        <h1 class="h3 text-dark mb-1">Bulk Status Update</h1>
+        <p class="text-muted">Upload CSV files or process S3 files to update multiple shipments at once</p>
+    </div>
+    <div class="col-md-4 text-md-end">
+        <a href="#" class="btn btn-outline-info" data-bs-toggle="modal" data-bs-target="#csvFormatModal">
+            <i class="fas fa-question-circle me-1"></i>CSV Format Help
+        </a>
+    </div>
+</div>
+
+<!-- Upload Methods -->
+<div class="row mb-4">
+    <!-- Manual Upload -->
+    <div class="col-lg-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-upload me-2"></i>Manual Upload
+                </h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">Upload a CSV file directly from your computer</p>
+                
+                <div class="upload-area border-2 border-dashed rounded p-4 text-center mb-3" id="uploadArea">
+                    <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
+                    <h5>Drop CSV file here or click to browse</h5>
+                    <p class="text-muted mb-3">Maximum file size: 16MB</p>
+                    <input type="file" id="csvFileInput" accept=".csv" style="display: none;">
+                    <button type="button" class="btn btn-primary" onclick="document.getElementById('csvFileInput').click()">
+                        <i class="fas fa-folder-open me-2"></i>Select File
+                    </button>
+                </div>
+                
+                <div id="uploadedFileInfo" style="display: none;" class="alert alert-info">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <i class="fas fa-file-csv me-2"></i>
+                            <span id="uploadedFileName"></span>
+                            <br><small class="text-muted" id="uploadedFileSize"></small>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-danger" id="removeFileBtn">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="d-grid">
+                    <button type="button" class="btn btn-success" id="processUploadBtn" disabled>
+                        <i class="fas fa-cogs me-2"></i>Process Upload
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- S3 Files -->
+    <div class="col-lg-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">
+                    <i class="fab fa-aws me-2"></i>S3 Files
+                </h5>
+                <button type="button" class="btn btn-sm btn-outline-primary" id="refreshS3Btn">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">Process CSV files uploaded to your S3 bucket</p>
+                
+                <div id="s3FilesList" style="max-height: 300px; overflow-y: auto;">
+                    {% if csv_files %}
+                    {% for file in csv_files %}
+                    <div class="s3-file-item border rounded p-3 mb-2" data-s3-key="{{ file.key }}">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div class="flex-grow-1">
+                                <h6 class="mb-1">{{ file.filename }}</h6>
+                                <small class="text-muted">
+                                    <i class="fas fa-calendar me-1"></i>{{ moment(file.last_modified).format('MM/DD/YYYY HH:mm') }}
+                                    <i class="fas fa-hdd ms-3 me-1"></i>{{ (file.size / 1024) | round(1) }} KB
+                                </small>
+                                {% if file.processed %}
+                                <br><span class="badge bg-success mt-1">
+                                    <i class="fas fa-check me-1"></i>Processed
+                                </span>
+                                {% endif %}
+                            </div>
+                            <div>
+                                {% if not file.processed %}
+                                <button type="button" class="btn btn-sm btn-primary" 
+                                        onclick="processS3File('{{ file.key }}', '{{ file.filename }}')">
+                                    <i class="fas fa-play"></i>
+                                </button>
+                                {% endif %}
+                                <button type="button" class="btn btn-sm btn-outline-info" 
+                                        onclick="previewS3File('{{ file.key }}', '{{ file.filename }}')">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="fab fa-aws fa-3x text-muted mb-3"></i>
+                        <h5 class="text-muted">No S3 Files Found</h5>
+                        <p class="text-muted">Upload CSV files to your S3 bucket to process them here</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Processing History -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-history me-2"></i>Processing History
+                </h5>
+                <button type="button" class="btn btn-sm btn-outline-primary" id="refreshHistoryBtn">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+            </div>
+            <div class="card-body">
+                {% if processing_history %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Filename</th>
+                                <th>Status</th>
+                                <th>Processed</th>
+                                <th>Failed</th>
+                                <th>Upload Date</th>
+                                <th>Processing Date</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for history in processing_history %}
+                            <tr>
+                                <td>
+                                    <i class="fas fa-file-csv me-2 text-primary"></i>
+                                    {{ history.filename }}
+                                </td>
+                                <td>
+                                    {% if history.status == 'completed' %}
+                                    <span class="badge bg-success">
+                                        <i class="fas fa-check me-1"></i>Completed
+                                    </span>
+                                    {% elif history.status == 'error' %}
+                                    <span class="badge bg-danger">
+                                        <i class="fas fa-exclamation-triangle me-1"></i>Error
+                                    </span>
+                                    {% elif history.status == 'processing' %}
+                                    <span class="badge bg-primary">
+                                        <i class="fas fa-spinner fa-spin me-1"></i>Processing
+                                    </span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">
+                                        <i class="fas fa-clock me-1"></i>Pending
+                                    </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if history.records_processed > 0 %}
+                                    <span class="text-success">
+                                        <strong>{{ history.records_processed }}</strong>
+                                    </span>
+                                    {% else %}
+                                    <span class="text-muted">0</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if history.records_failed > 0 %}
+                                    <span class="text-danger">
+                                        <strong>{{ history.records_failed }}</strong>
+                                    </span>
+                                    {% else %}
+                                    <span class="text-muted">0</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ moment(history.created_at).format('MM/DD/YYYY HH:mm') }}</td>
+                                <td>
+                                    {% if history.processed_at %}
+                                    {{ moment(history.processed_at).format('MM/DD/YYYY HH:mm') }}
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm" role="group">
+                                        {% if history.status == 'error' %}
+                                        <button type="button" class="btn btn-outline-warning" 
+                                                onclick="retryProcessing({{ history.id }})" 
+                                                title="Retry">
+                                            <i class="fas fa-redo"></i>
+                                        </button>
+                                        {% endif %}
+                                        {% if history.error_details %}
+                                        <button type="button" class="btn btn-outline-danger" 
+                                                onclick="showErrorDetails('{{ history.error_details }}')" 
+                                                title="View Error">
+                                            <i class="fas fa-exclamation-circle"></i>
+                                        </button>
+                                        {% endif %}
+                                        <button type="button" class="btn btn-outline-info" 
+                                                onclick="showProcessingDetails({{ history.id }})" 
+                                                title="Details">
+                                            <i class="fas fa-info"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-4">
+                    <i class="fas fa-history fa-3x text-muted mb-3"></i>
+                    <h5 class="text-muted">No Processing History</h5>
+                    <p class="text-muted">Upload and process CSV files to see history here</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- CSV Format Help Modal -->
+<div class="modal fade" id="csvFormatModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">CSV Format Requirements</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <h6>Required Columns:</h6>
+                <div class="table-responsive mb-4">
+                    <table class="table table-sm table-bordered">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Column Name</th>
+                                <th>Description</th>
+                                <th>Required</th>
+                                <th>Example</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>shipment_id</code></td>
+                                <td>Unique shipment identifier</td>
+                                <td><span class="badge bg-danger">Required</span></td>
+                                <td>TFST-SH-00001</td>
+                            </tr>
+                            <tr>
+                                <td><code>status</code></td>
+                                <td>New shipment status</td>
+                                <td><span class="badge bg-danger">Required</span></td>
+                                <td>In Transit</td>
+                            </tr>
+                            <tr>
+                                <td><code>timestamp</code></td>
+                                <td>Update timestamp</td>
+                                <td><span class="badge bg-danger">Required</span></td>
+                                <td>2024-01-15T14:30:00Z</td>
+                            </tr>
+                            <tr>
+                                <td><code>location_lat</code></td>
+                                <td>GPS latitude</td>
+                                <td><span class="badge bg-secondary">Optional</span></td>
+                                <td>32.7767</td>
+                            </tr>
+                            <tr>
+                                <td><code>location_lng</code></td>
+                                <td>GPS longitude</td>
+                                <td><span class="badge bg-secondary">Optional</span></td>
+                                <td>-96.7970</td>
+                            </tr>
+                            <tr>
+                                <td><code>driver_name</code></td>
+                                <td>Driver name</td>
+                                <td><span class="badge bg-secondary">Optional</span></td>
+                                <td>John Doe</td>
+                            </tr>
+                            <tr>
+                                <td><code>truck_number</code></td>
+                                <td>Truck identifier</td>
+                                <td><span class="badge bg-secondary">Optional</span></td>
+                                <td>TR001</td>
+                            </tr>
+                            <tr>
+                                <td><code>notes</code></td>
+                                <td>Additional notes</td>
+                                <td><span class="badge bg-secondary">Optional</span></td>
+                                <td>On schedule</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <h6>Valid Status Values:</h6>
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <ul class="list-group list-group-flush">
+                            <li class="list-group-item">Dispatched</li>
+                            <li class="list-group-item">At pickup site</li>
+                            <li class="list-group-item">Pickup Complete</li>
+                            <li class="list-group-item">In Transit</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <ul class="list-group list-group-flush">
+                            <li class="list-group-item">Delayed</li>
+                            <li class="list-group-item">Arrived at site</li>
+                            <li class="list-group-item">Delivered</li>
+                            <li class="list-group-item">Unloading complete</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <h6>Sample CSV:</h6>
+                <pre class="bg-light p-3 rounded"><code>shipment_id,status,timestamp,location_lat,location_lng,notes,driver_name,truck_number
+TFST-SH-00001,In Transit,2024-01-15T14:30:00Z,32.7767,-96.7970,On schedule,John Doe,TR001
+TFST-SH-00002,Delivered,2024-01-15T15:45:00Z,33.1498,-96.8233,Delivered successfully,Jane Smith,TR002</code></pre>
+                
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    <strong>Note:</strong> Make sure your CSV file uses comma separators and includes headers in the first row.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <a href="#" class="btn btn-primary" id="downloadTemplateBtn">
+                    <i class="fas fa-download me-1"></i>Download Template
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Processing Modal -->
+<div class="modal fade" id="processingModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Processing CSV File</h5>
+            </div>
+            <div class="modal-body text-center">
+                <div class="spinner-border text-primary mb-3" role="status">
+                    <span class="visually-hidden">Processing...</span>
+                </div>
+                <p id="processingMessage">Processing your CSV file...</p>
+                <div class="progress mb-3">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                         role="progressbar" style="width: 0%" id="processingProgress"></div>
+                </div>
+                <small class="text-muted" id="processingDetails">Please wait while we validate and process your data.</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Results Modal -->
+<div class="modal fade" id="resultsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Processing Results</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="resultsContent">
+                    <!-- Results will be loaded here -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="location.reload()">
+                    <i class="fas fa-sync-alt me-1"></i>Refresh Page
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.upload-area {
+    cursor: pointer;
+    transition: all 0.3s ease;
+    min-height: 200px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.upload-area:hover {
+    border-color: #007bff;
+    background-color: #f8f9fa;
+}
+
+.upload-area.dragover {
+    border-color: #007bff;
+    background-color: #e3f2fd;
+}
+
+.s3-file-item {
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.s3-file-item:hover {
+    background-color: #f8f9fa;
+    transform: translateY(-1px);
+}
+
+.progress {
+    height: 6px;
+}
+
+pre code {
+    font-size: 0.85em;
+    line-height: 1.4;
+}
+
+.table-responsive {
+    border-radius: 0.5rem;
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
+<script>
+$(document).ready(function() {
+    // File upload handling
+    const uploadArea = document.getElementById('uploadArea');
+    const fileInput = document.getElementById('csvFileInput');
+    
+    // Drag and drop functionality
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        uploadArea.addEventListener(eventName, preventDefaults, false);
+    });
+    
+    ['dragenter', 'dragover'].forEach(eventName => {
+        uploadArea.addEventListener(eventName, highlight, false);
+    });
+    
+    ['dragleave', 'drop'].forEach(eventName => {
+        uploadArea.addEventListener(eventName, unhighlight, false);
+    });
+    
+    uploadArea.addEventListener('drop', handleDrop, false);
+    uploadArea.addEventListener('click', () => fileInput.click());
+    
+    fileInput.addEventListener('change', function() {
+        if (this.files.length > 0) {
+            handleFile(this.files[0]);
+        }
+    });
+    
+    // Process upload button
+    $('#processUploadBtn').click(processManualUpload);
+    
+    // Remove file button
+    $('#removeFileBtn').click(function() {
+        fileInput.value = '';
+        $('#uploadedFileInfo').hide();
+        $('#processUploadBtn').prop('disabled', true);
+    });
+    
+    // Refresh buttons
+    $('#refreshS3Btn').click(refreshS3Files);
+    $('#refreshHistoryBtn').click(() => location.reload());
+    
+    // Download template
+    $('#downloadTemplateBtn').click(downloadTemplate);
+});
+
+function preventDefaults(e) {
+    e.preventDefault();
+    e.stopPropagation();
+}
+
+function highlight(e) {
+    document.getElementById('uploadArea').classList.add('dragover');
+}
+
+function unhighlight(e) {
+    document.getElementById('uploadArea').classList.remove('dragover');
+}
+
+function handleDrop(e) {
+    const dt = e.dataTransfer;
+    const files = dt.files;
+    
+    if (files.length > 0) {
+        handleFile(files[0]);
+    }
+}
+
+function handleFile(file) {
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+        TFST.showAlert('Please select a CSV file', 'warning');
+        return;
+    }
+    
+    if (file.size > 16 * 1024 * 1024) { // 16MB limit
+        TFST.showAlert('File size exceeds 16MB limit', 'warning');
+        return;
+    }
+    
+    // Display file info
+    $('#uploadedFileName').text(file.name);
+    $('#uploadedFileSize').text(formatFileSize(file.size));
+    $('#uploadedFileInfo').show();
+    $('#processUploadBtn').prop('disabled', false);
+    
+    // Store file for processing
+    window.selectedFile = file;
+}
+
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+function processManualUpload() {
+    if (!window.selectedFile) {
+        TFST.showAlert('Please select a file first', 'warning');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('file', window.selectedFile);
+    
+    // Show processing modal
+    $('#processingModal').modal('show');
+    updateProcessingProgress(25, 'Uploading file...');
+    
+    $.ajax({
+        url: '/shipments/upload-csv',
+        type: 'POST',
+        data: formData,
+        processData: false,
+        contentType: false,
+        xhr: function() {
+            const xhr = new window.XMLHttpRequest();
+            xhr.upload.addEventListener('progress', function(evt) {
+                if (evt.lengthComputable) {
+                    const percentComplete = evt.loaded / evt.total * 50; // Upload is 50% of progress
+                    updateProcessingProgress(percentComplete, 'Uploading file...');
+                }
+            }, false);
+            return xhr;
+        },
+        success: function(response) {
+            updateProcessingProgress(75, 'Processing data...');
+            
+            setTimeout(() => {
+                updateProcessingProgress(100, 'Complete!');
+                $('#processingModal').modal('hide');
+                showResults(response);
+            }, 1000);
+        },
+        error: function(xhr) {
+            $('#processingModal').modal('hide');
+            const response = xhr.responseJSON || {};
+            TFST.showAlert('Upload failed: ' + (response.error || 'Unknown error'), 'danger');
+        }
+    });
+}
+
+function processS3File(s3Key, filename) {
+    // Show processing modal
+    $('#processingModal').modal('show');
+    $('#processingMessage').text(`Processing ${filename}...`);
+    updateProcessingProgress(0, 'Starting...');
+    
+    $.ajax({
+        url: `/shipments/process-csv/${encodeURIComponent(s3Key)}`,
+        type: 'POST',
+        success: function(response) {
+            updateProcessingProgress(100, 'Complete!');
+            setTimeout(() => {
+                $('#processingModal').modal('hide');
+                showResults(response);
+            }, 500);
+        },
+        error: function(xhr) {
+            $('#processingModal').modal('hide');
+            const response = xhr.responseJSON || {};
+            TFST.showAlert('Processing failed: ' + (response.error || 'Unknown error'), 'danger');
+        }
+    });
+    
+    // Simulate progress updates
+    let progress = 0;
+    const progressInterval = setInterval(() => {
+        progress += Math.random() * 20;
+        if (progress < 90) {
+            updateProcessingProgress(progress, 'Processing data...');
+        } else {
+            clearInterval(progressInterval);
+        }
+    }, 500);
+}
+
+function updateProcessingProgress(percent, message) {
+    $('#processingProgress').css('width', percent + '%');
+    $('#processingDetails').text(message);
+}
+
+function showResults(response) {
+    const resultsHtml = `
+        <div class="row mb-4">
+            <div class="col-md-4 text-center">
+                <div class="card border-success">
+                    <div class="card-body">
+                        <h3 class="text-success">${response.process_result?.processed_count || 0}</h3>
+                        <p class="mb-0">Records Processed</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 text-center">
+                <div class="card border-danger">
+                    <div class="card-body">
+                        <h3 class="text-danger">${response.process_result?.failed_count || 0}</h3>
+                        <p class="mb-0">Records Failed</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 text-center">
+                <div class="card border-info">
+                    <div class="card-body">
+                        <h3 class="text-info">${response.process_result?.processed_count + response.process_result?.failed_count || 0}</h3>
+                        <p class="mb-0">Total Records</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        ${response.process_result?.errors ? `
+        <div class="alert alert-warning">
+            <h6><i class="fas fa-exclamation-triangle me-2"></i>Processing Errors:</h6>
+            <ul class="mb-0">
+                ${response.process_result.errors.map(error => `<li>${error}</li>`).join('')}
+            </ul>
+        </div>
+        ` : ''}
+        
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle me-2"></i>
+            Updates have been synchronized with Firebase and Salesforce. 
+            Changes will be reflected in your shipment dashboard and mobile driver app.
+        </div>
+    `;
+    
+    $('#resultsContent').html(resultsHtml);
+    $('#resultsModal').modal('show');
+}
+
+function previewS3File(s3Key, filename) {
+    TFST.showAlert(`Preview for ${filename} would be implemented here`, 'info');
+}
+
+function refreshS3Files() {
+    $('#refreshS3Btn').html('<i class="fas fa-spinner fa-spin"></i>');
+    
+    // Reload the page to refresh S3 files list
+    setTimeout(() => {
+        location.reload();
+    }, 500);
+}
+
+function retryProcessing(uploadLogId) {
+    if (confirm('Are you sure you want to retry processing this file?')) {
+        TFST.showLoading();
+        
+        $.ajax({
+            url: '/api/v1/csv/retry/' + uploadLogId,
+            type: 'POST',
+            success: function(response) {
+                TFST.hideLoading();
+                if (response.success) {
+                    TFST.showAlert('Processing restarted successfully', 'success');
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    TFST.showAlert('Failed to retry processing: ' + response.error, 'danger');
+                }
+            },
+            error: function() {
+                TFST.hideLoading();
+                TFST.showAlert('Failed to retry processing', 'danger');
+            }
+        });
+    }
+}
+
+function showErrorDetails(errorDetails) {
+    const errorModal = `
+        <div class="modal fade" id="errorModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header bg-danger text-white">
+                        <h5 class="modal-title">Processing Error Details</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <pre class="bg-light p-3 rounded">${errorDetails}</pre>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    $('body').append(errorModal);
+    $('#errorModal').modal('show').on('hidden.bs.modal', function() {
+        $(this).remove();
+    });
+}
+
+function showProcessingDetails(uploadLogId) {
+    TFST.showAlert(`Processing details for upload ${uploadLogId} would be displayed here`, 'info');
+}
+
+function downloadTemplate() {
+    const csvContent = `shipment_id,status,timestamp,location_lat,location_lng,notes,driver_name,truck_number
+TFST-SH-00001,In Transit,2024-01-15T14:30:00Z,32.7767,-96.7970,On schedule,John Doe,TR001
+TFST-SH-00002,Delivered,2024-01-15T15:45:00Z,33.1498,-96.8233,Delivered successfully,Jane Smith,TR002`;
+    
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'tfst_shipment_update_template.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+}
+</script>

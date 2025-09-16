@@ -1,0 +1,456 @@
+{% extends "base.html" %}
+
+{% block title %}Shipments - TFST Carrier Portal{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <h1 class="h3 text-dark mb-1">My Shipments</h1>
+        <p class="text-muted">Manage and track your assigned shipments</p>
+    </div>
+    <div class="col-md-4 text-md-end">
+        <div class="btn-group" role="group">
+            <a href="{{ url_for('shipments.map_view') }}" class="btn btn-outline-info">
+                <i class="fas fa-map-marked-alt me-1"></i>Map View
+            </a>
+            <a href="{{ url_for('shipments.bulk_update') }}" class="btn btn-primary">
+                <i class="fas fa-upload me-1"></i>Bulk Update
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="GET" class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label">Search</label>
+                <input type="text" class="form-control" name="search" 
+                       value="{{ current_filters.search or '' }}" 
+                       placeholder="Shipment ID, Project...">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Status</label>
+                <select class="form-select" name="status">
+                    <option value="">All Statuses</option>
+                    {% for status in statuses %}
+                    <option value="{{ status }}" {{ 'selected' if current_filters.status == status }}>
+                        {{ status }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Per Page</label>
+                <select class="form-select" name="per_page">
+                    <option value="25" {{ 'selected' if pagination.per_page == 25 }}>25</option>
+                    <option value="50" {{ 'selected' if pagination.per_page == 50 }}>50</option>
+                    <option value="100" {{ 'selected' if pagination.per_page == 100 }}>100</option>
+                </select>
+            </div>
+            <div class="col-md-3 d-flex align-items-end">
+                <div class="btn-group w-100" role="group">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-filter me-1"></i>Filter
+                    </button>
+                    <a href="{{ url_for('shipments.index') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-times me-1"></i>Clear
+                    </a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Shipments Table -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <div>
+            <h5 class="card-title mb-0">
+                <i class="fas fa-shipping-fast me-2"></i>
+                Shipments ({{ pagination.total }})
+            </h5>
+        </div>
+        <div class="btn-group btn-group-sm" role="group">
+            <button type="button" class="btn btn-outline-secondary" id="refreshBtn">
+                <i class="fas fa-sync-alt"></i>
+            </button>
+            <div class="dropdown">
+                <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                    <i class="fas fa-download"></i>
+                </button>
+                <ul class="dropdown-menu">
+                    <li><a class="dropdown-item" href="#" id="exportCSV">
+                        <i class="fas fa-file-csv me-2"></i>Export CSV
+                    </a></li>
+                    <li><a class="dropdown-item" href="#" id="exportPDF">
+                        <i class="fas fa-file-pdf me-2"></i>Export PDF
+                    </a></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        {% if shipments %}
+        <div class="table-responsive">
+            <table class="table table-hover mb-0" id="shipmentsTable">
+                <thead class="table-light">
+                    <tr>
+                        <th>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="selectAll">
+                            </div>
+                        </th>
+                        <th>Shipment ID</th>
+                        <th>Project</th>
+                        <th>Status</th>
+                        <th>Pickup Date</th>
+                        <th>Delivery Date</th>
+                        <th>Weight</th>
+                        <th>Service Level</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for shipment in shipments %}
+                    <tr data-shipment-id="{{ shipment.Id }}" class="shipment-row">
+                        <td>
+                            <div class="form-check">
+                                <input class="form-check-input shipment-checkbox" type="checkbox" value="{{ shipment.Id }}">
+                            </div>
+                        </td>
+                        <td>
+                            <div class="d-flex align-items-center">
+                                <strong>{{ shipment.Name or shipment.Id[:10] }}</strong>
+                                {% if shipment.realtime_available %}
+                                <span class="badge bg-success ms-2" title="Real-time tracking">
+                                    <i class="fas fa-satellite fa-xs"></i>
+                                </span>
+                                {% endif %}
+                                {% if shipment.Critical_Path %}
+                                <span class="badge bg-warning ms-1" title="Critical Path">
+                                    <i class="fas fa-exclamation fa-xs"></i>
+                                </span>
+                                {% endif %}
+                            </div>
+                            <small class="text-muted">{{ shipment.TFST_Service_Order_Number__c or '' }}</small>
+                        </td>
+                        <td>
+                            <span class="text-truncate" style="max-width: 120px; display: inline-block;" 
+                                  title="{{ shipment.TFST_Project_Reference__c or 'N/A' }}">
+                                {{ shipment.TFST_Project_Reference__c or 'N/A' }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="badge status-badge status-{{ shipment.status.lower().replace(' ', '-') if shipment.status else 'unknown' }}">
+                                {{ shipment.status or 'Unknown' }}
+                            </span>
+                            {% if shipment.last_updated %}
+                            <br><small class="text-muted">Updated: {{ moment(shipment.last_updated).format('MM/DD HH:mm') }}</small>
+                            {% endif %}
+                        </td>
+                        <td>{{ shipment.PickUp_Date__c or 'N/A' }}</td>
+                        <td>
+                            {{ shipment.Required_Delivery_Date__c or 'N/A' }}
+                            {% if shipment.Required_Delivery_Date__c %}
+                                {% set delivery_date = moment(shipment.Required_Delivery_Date__c) %}
+                                {% set today = moment() %}
+                                {% if delivery_date.isBefore(today, 'day') and shipment.status != 'Delivered' %}
+                                <br><small class="text-danger"><i class="fas fa-exclamation-triangle"></i> Overdue</small>
+                                {% elif delivery_date.diff(today, 'days') <= 1 %}
+                                <br><small class="text-warning"><i class="fas fa-clock"></i> Due Soon</small>
+                                {% endif %}
+                            {% endif %}
+                        </td>
+                        <td>{{ shipment.TFST_Total_Weight__c or 'N/A' }}{% if shipment.TFST_Total_Weight__c %} lbs{% endif %}</td>
+                        <td>
+                            <span class="badge bg-{{ 'danger' if shipment.TFST_Service_Level__c == 'Urgent' else 'secondary' }}">
+                                {{ shipment.TFST_Service_Level__c or 'Standard' }}
+                            </span>
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm" role="group">
+                                <a href="{{ url_for('shipments.detail', shipment_id=shipment.Id) }}" 
+                                   class="btn btn-outline-primary btn-sm" title="View Details">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                                {% if current_user.can_update_shipments %}
+                                <button type="button" class="btn btn-outline-success btn-sm" 
+                                        title="Update Status" 
+                                        onclick="showStatusUpdateModal('{{ shipment.Id }}', '{{ shipment.Name }}', '{{ shipment.status }}')">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                {% endif %}
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <button type="button" class="btn btn-outline-secondary btn-sm dropdown-toggle" 
+                                            data-bs-toggle="dropdown" title="More Actions">
+                                        <i class="fas fa-ellipsis-v"></i>
+                                    </button>
+                                    <ul class="dropdown-menu">
+                                        <li><a class="dropdown-item" href="{{ url_for('shipments.get_tracking_history', shipment_id=shipment.Id) }}">
+                                            <i class="fas fa-history me-2"></i>History
+                                        </a></li>
+                                        <li><a class="dropdown-item" href="{{ url_for('shipments.get_documents', shipment_id=shipment.Id) }}">
+                                            <i class="fas fa-file me-2"></i>Documents
+                                        </a></li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Pagination -->
+        {% if pagination.pages > 1 %}
+        <div class="card-footer">
+            <nav aria-label="Shipments pagination">
+                <ul class="pagination justify-content-center mb-0">
+                    {% if pagination.has_prev %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('shipments.index', page=pagination.page-1, **current_filters) }}">Previous</a>
+                    </li>
+                    {% endif %}
+                    
+                    {% for page_num in range(1, pagination.pages + 1) %}
+                        {% if page_num == pagination.page %}
+                        <li class="page-item active">
+                            <span class="page-link">{{ page_num }}</span>
+                        </li>
+                        {% elif page_num <= 3 or page_num > pagination.pages - 3 or (page_num >= pagination.page - 1 and page_num <= pagination.page + 1) %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('shipments.index', page=page_num, **current_filters) }}">{{ page_num }}</a>
+                        </li>
+                        {% elif page_num == 4 or page_num == pagination.pages - 3 %}
+                        <li class="page-item disabled">
+                            <span class="page-link">...</span>
+                        </li>
+                        {% endif %}
+                    {% endfor %}
+                    
+                    {% if pagination.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('shipments.index', page=pagination.page+1, **current_filters) }}">Next</a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+        {% endif %}
+        
+        {% else %}
+        <div class="text-center py-5">
+            <i class="fas fa-shipping-fast fa-4x text-muted mb-3"></i>
+            <h4 class="text-muted">No Shipments Found</h4>
+            <p class="text-muted">
+                {% if current_filters.search or current_filters.status %}
+                Try adjusting your filters or <a href="{{ url_for('shipments.index') }}">clear all filters</a>
+                {% else %}
+                No shipments have been assigned to your carrier account yet.
+                {% endif %}
+            </p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Bulk Actions (shown when shipments are selected) -->
+<div class="card mt-3" id="bulkActionsCard" style="display: none;">
+    <div class="card-body">
+        <div class="row align-items-center">
+            <div class="col-md-6">
+                <span id="selectedCount">0</span> shipments selected
+            </div>
+            <div class="col-md-6 text-md-end">
+                <div class="btn-group" role="group">
+                    <button type="button" class="btn btn-outline-success" id="bulkStatusUpdate">
+                        <i class="fas fa-edit me-1"></i>Update Status
+                    </button>
+                    <button type="button" class="btn btn-outline-primary" id="bulkExport">
+                        <i class="fas fa-download me-1"></i>Export Selected
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Status Update Modal -->
+<div class="modal fade" id="statusUpdateModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Update Shipment Status</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="statusUpdateForm">
+                <div class="modal-body">
+                    <input type="hidden" id="statusUpdateShipmentId">
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Shipment</label>
+                        <p class="form-control-plaintext" id="statusUpdateShipmentName"></p>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Status <span class="text-danger">*</span></label>
+                        <select class="form-select" id="statusUpdateStatus" required>
+                            <option value="">Select Status</option>
+                            <option value="Dispatched">Dispatched</option>
+                            <option value="At pickup site">At pickup site</option>
+                            <option value="Pickup Complete">Pickup Complete</option>
+                            <option value="In Transit">In Transit</option>
+                            <option value="Delayed">Delayed</option>
+                            <option value="Arrived at site">Arrived at site</option>
+                            <option value="Delivered">Delivered</option>
+                            <option value="Unloading complete">Unloading complete</option>
+                        </select>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Latitude</label>
+                            <input type="number" class="form-control" id="statusUpdateLat" step="any" placeholder="32.7767">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Longitude</label>
+                            <input type="number" class="form-control" id="statusUpdateLng" step="any" placeholder="-96.7970">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Driver Name</label>
+                        <input type="text" class="form-control" id="statusUpdateDriverName" placeholder="John Doe">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Notes</label>
+                        <textarea class="form-control" id="statusUpdateNotes" rows="3" placeholder="Additional notes..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-1"></i>Update Status
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
+<script>
+$(document).ready(function() {
+    // Checkbox handling
+    $('#selectAll').change(function() {
+        $('.shipment-checkbox').prop('checked', this.checked);
+        updateBulkActions();
+    });
+    
+    $('.shipment-checkbox').change(function() {
+        updateBulkActions();
+        
+        // Update select all checkbox
+        const totalCheckboxes = $('.shipment-checkbox').length;
+        const checkedBoxes = $('.shipment-checkbox:checked').length;
+        
+        $('#selectAll').prop('checked', totalCheckboxes === checkedBoxes);
+        $('#selectAll').prop('indeterminate', checkedBoxes > 0 && checkedBoxes < totalCheckboxes);
+    });
+    
+    function updateBulkActions() {
+        const selectedCount = $('.shipment-checkbox:checked').length;
+        $('#selectedCount').text(selectedCount);
+        
+        if (selectedCount > 0) {
+            $('#bulkActionsCard').show();
+        } else {
+            $('#bulkActionsCard').hide();
+        }
+    }
+    
+    // Status update form
+    $('#statusUpdateForm').submit(function(e) {
+        e.preventDefault();
+        
+        const shipmentId = $('#statusUpdateShipmentId').val();
+        const status = $('#statusUpdateStatus').val();
+        const lat = parseFloat($('#statusUpdateLat').val()) || null;
+        const lng = parseFloat($('#statusUpdateLng').val()) || null;
+        const driverName = $('#statusUpdateDriverName').val();
+        const notes = $('#statusUpdateNotes').val();
+        
+        if (!status) {
+            TFST.showAlert('Please select a status', 'warning');
+            return;
+        }
+        
+        const updateData = {
+            status: status,
+            notes: notes
+        };
+        
+        if (lat && lng) {
+            updateData.location = { lat: lat, lng: lng };
+        }
+        
+        if (driverName) {
+            updateData.driver_info = { name: driverName };
+        }
+        
+        TFST.showLoading();
+        
+        $.ajax({
+            url: `/shipments/${shipmentId}/update-status`,
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(updateData),
+            success: function(response) {
+                TFST.hideLoading();
+                $('#statusUpdateModal').modal('hide');
+                
+                if (response.success) {
+                    TFST.showAlert('Status updated successfully', 'success');
+                    // Refresh the row
+                    location.reload();
+                } else {
+                    TFST.showAlert('Failed to update status: ' + (response.error || 'Unknown error'), 'danger');
+                }
+            },
+            error: function(xhr) {
+                TFST.hideLoading();
+                const response = xhr.responseJSON || {};
+                TFST.showAlert('Failed to update status: ' + (response.error || 'Server error'), 'danger');
+            }
+        });
+    });
+    
+    // Refresh button
+    $('#refreshBtn').click(function() {
+        location.reload();
+    });
+    
+    // Export functions
+    $('#exportCSV').click(function() {
+        window.location.href = '{{ url_for("shipments.index") }}?' + $.param({...{{ current_filters | tojson }}, format: 'csv'});
+    });
+});
+
+// Global function for status update modal
+function showStatusUpdateModal(shipmentId, shipmentName, currentStatus) {
+    $('#statusUpdateShipmentId').val(shipmentId);
+    $('#statusUpdateShipmentName').text(shipmentName);
+    $('#statusUpdateStatus').val(currentStatus);
+    
+    // Clear other fields
+    $('#statusUpdateLat, #statusUpdateLng, #statusUpdateDriverName, #statusUpdateNotes').val('');
+    
+    $('#statusUpdateModal').modal('show');
+}
+</script>

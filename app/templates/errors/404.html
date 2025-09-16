@@ -1,0 +1,25 @@
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-lg-6 text-center">
+            <div class="py-5">
+                <div class="mb-4">
+                    <i class="fas fa-truck fa-5x text-muted mb-3"></i>
+                    <h1 class="display-1 text-primary">404</h1>
+                </div>
+                <h2 class="h4 mb-3">Page Not Found</h2>
+                <p class="text-muted mb-4">
+                    Sorry, the page you're looking for seems to have taken a different route. 
+                    Let's get you back on track!
+                </p>
+                <div class="d-grid gap-2 d-md-block">
+                    <a href="{{ url_for('dashboard.index') }}" class="btn btn-primary">
+                        <i class="fas fa-home me-2"></i>Go to Dashboard
+                    </a>
+                    <a href="{{ url_for('shipments.index') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-shipping-fast me-2"></i>View Shipments
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

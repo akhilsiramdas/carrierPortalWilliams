@@ -1,0 +1,108 @@
+<div class="row">
+    <div class="col-lg-8 mx-auto">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 class="card-title mb-0">
+                    <i class="fas fa-clock me-2"></i>Active Sessions
+                </h4>
+                <span class="badge bg-primary">{{ sessions|length }} Active</span>
+            </div>
+            <div class="card-body">
+                <p class="text-muted mb-4">
+                    Manage your active login sessions. For security reasons, you can revoke any session if you suspect unauthorized access.
+                </p>
+                
+                {% if sessions %}
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Device / Browser</th>
+                                <th>IP Address</th>
+                                <th>Last Activity</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for session in sessions %}
+                            <tr>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        {% if 'Mobile' in session.user_agent or 'Android' in session.user_agent or 'iPhone' in session.user_agent %}
+                                        <i class="fas fa-mobile-alt text-primary me-2"></i>
+                                        {% else %}
+                                        <i class="fas fa-desktop text-info me-2"></i>
+                                        {% endif %}
+                                        <div>
+                                            <div class="fw-bold">
+                                                {% if 'Chrome' in session.user_agent %}Chrome
+                                                {% elif 'Firefox' in session.user_agent %}Firefox
+                                                {% elif 'Safari' in session.user_agent %}Safari
+                                                {% elif 'Edge' in session.user_agent %}Edge
+                                                {% else %}Unknown Browser
+                                                {% endif %}
+                                            </div>
+                                            <small class="text-muted">{{ session.user_agent[:50] }}...</small>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <code>{{ session.ip_address or 'Unknown' }}</code>
+                                </td>
+                                <td>
+                                    {% if session.last_activity %}
+                                    {{ moment(session.last_activity).fromNow() }}
+                                    {% else %}
+                                    {{ moment(session.created_at).fromNow() }}
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if session.session_token == session.get('current_session_token') %}
+                                    <span class="badge bg-success">
+                                        <i class="fas fa-circle me-1"></i>Current Session
+                                    </span>
+                                    {% elif session.is_expired %}
+                                    <span class="badge bg-secondary">
+                                        <i class="fas fa-clock me-1"></i>Expired
+                                    </span>
+                                    {% else %}
+                                    <span class="badge bg-primary">
+                                        <i class="fas fa-circle me-1"></i>Active
+                                    </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if session.session_token != session.get('current_session_token') and not session.is_expired %}
+                                    <form method="POST" action="{{ url_for('auth.revoke_session', session_id=session.id) }}" style="display: inline;">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" 
+                                                onclick="return confirm('Are you sure you want to revoke this session?')">
+                                            <i class="fas fa-times me-1"></i>Revoke
+                                        </button>
+                                    </form>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="alert alert-info mt-4">
+                    <i class="fas fa-shield-alt me-2"></i>
+                    <strong>Security Tip:</strong> If you see any sessions you don't recognize, revoke them immediately and change your password.
+                </div>
+                
+                {% else %}
+                <div class="text-center py-4">
+                    <i class="fas fa-user-shield fa-3x text-muted mb-3"></i>
+                    <h5 class="text-muted">No Active Sessions</h5>
+                    <p class="text-muted">Your current session is the only active session.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>

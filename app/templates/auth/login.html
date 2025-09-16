@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+
+{% block title %}Login - Carrier Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+    .login-container {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+    }
+    
+    .login-card {
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+        max-width: 400px;
+        width: 100%;
+    }
+    
+    .login-header {
+        background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+        color: white;
+        padding: 2rem;
+        text-align: center;
+    }
+    
+    .login-body {
+        padding: 2rem;
+    }
+    
+    .btn-salesforce {
+        background: #00a1e0;
+        border-color: #00a1e0;
+        color: white;
+        padding: 12px 24px;
+        border-radius: 8px;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        width: 100%;
+        text-decoration: none;
+        display: inline-block;
+        text-align: center;
+    }
+    
+    .btn-salesforce:hover {
+        background: #0085b8;
+        border-color: #0085b8;
+        color: white;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 161, 224, 0.3);
+    }
+    
+    .feature-list {
+        background: #f8fafc;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-top: 2rem;
+    }
+    
+    .feature-item {
+        display: flex;
+        align-items: center;
+        margin-bottom: 0.75rem;
+        color: #4b5563;
+    }
+    
+    .feature-item:last-child {
+        margin-bottom: 0;
+    }
+    
+    .feature-icon {
+        color: #10b981;
+        margin-right: 0.75rem;
+        width: 16px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="login-container">
+    <div class="login-card">
+        <div class="login-header">
+            <h1 class="h3 mb-2">
+                <i class="fas fa-truck mb-3" style="font-size: 2rem;"></i><br>
+                Carrier Portal
+            </h1>
+            <p class="mb-0 opacity-75">Shipment Management & Tracking</p>
+        </div>
+        
+        <div class="login-body">
+            <div class="text-center mb-4">
+                <h2 class="h5 text-dark mb-3">Welcome Back!</h2>
+                <p class="text-muted">Sign in with your Salesforce account to access the carrier portal</p>
+            </div>
+            
+            <div class="d-grid">
+                <a href="{{ oauth_url }}" class="btn btn-salesforce">
+                    <i class="fab fa-salesforce me-2"></i>
+                    Sign in with Salesforce
+                </a>
+            </div>
+            
+            <div class="feature-list">
+                <h6 class="text-dark mb-3">Portal Features:</h6>
+                <div class="feature-item">
+                    <i class="fas fa-tachometer-alt feature-icon"></i>
+                    <span>Real-time shipment dashboard</span>
+                </div>
+                <div class="feature-item">
+                    <i class="fas fa-map-marked-alt feature-icon"></i>
+                    <span>GPS tracking & map view</span>
+                </div>
+                <div class="feature-item">
+                    <i class="fas fa-camera feature-icon"></i>
+                    <span>Photo upload & documentation</span>
+                </div>
+                <div class="feature-item">
+                    <i class="fas fa-upload feature-icon"></i>
+                    <span>Bulk status updates via CSV</span>
+                </div>
+                <div class="feature-item">
+                    <i class="fas fa-chart-line feature-icon"></i>
+                    <span>Performance analytics</span>
+                </div>
+            </div>
+            
+            <div class="text-center mt-4">
+                <small class="text-muted">
+                    Need help? Contact your administrator<br>
+                    <a href="mailto:support@williams.com">support@williams.com</a>
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    // Add loading state to Salesforce login button
+    $('.btn-salesforce').click(function() {
+        $(this).html('<i class="fas fa-spinner fa-spin me-2"></i>Connecting to Salesforce...');
+        $(this).addClass('disabled');
+    });
+    
+    // Check for error parameters in URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const error = urlParams.get('error');
+    if (error) {
+        let errorMessage = 'Login failed. Please try again.';
+        
+        if (error === 'access_denied') {
+            errorMessage = 'Access denied. Please contact your administrator.';
+        } else if (error === 'invalid_client_id') {
+            errorMessage = 'Configuration error. Please contact support.';
+        }
+        
+        TFST.showAlert(errorMessage, 'danger');
+    }
+});
+</script>
+{% endblock %}

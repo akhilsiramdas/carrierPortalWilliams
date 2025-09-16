@@ -1,0 +1,207 @@
+{% extends 'base.html' %}
+
+{% block title %}Carrier Dashboard{% endblock %}
+
+{% block content %}
+<h1 class="mb-4">Carrier Dashboard</h1>
+<p class="text-muted">Welcome back, {{ user.name or 'admin User' }} - {{ user.company_name or 'Carrier' }}</p>
+
+<!-- KPI Cards -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body text-center">
+                <div class="text-muted">Total Shipments</div>
+                <div class="display-4">{{ kpis.total_shipments }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body text-center">
+                <div class="text-muted">Active shipments<br>In Transit</div>
+                <div class="display-4">{{ kpis.in_transit }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body text-center">
+                <div class="text-muted">Currently moving<br>Delivered Today</div>
+                <div class="display-4">{{ kpis.delivered_today }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body text-center">
+                <div class="text-muted">Completed today<br>On-Time %</div>
+                <div class="display-4">{{ kpis.on_time_percentage }}%</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Shipments -->
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Recent Shipments</h5>
+        <a href="{{ url_for('shipments.index') }}" class="btn btn-sm btn-primary">View All</a>
+    </div>
+    <div class="card-body">
+        {% if shipments %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Status</th>
+                        <th>Origin</th>
+                        <th>Destination</th>
+                        <th>Delivery Date</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for shipment in shipments %}
+                    <tr>
+                        <td>{{ shipment.Name }}</td>
+                        <td><span class="badge bg-{{ 'success' if shipment.status == 'Delivered' else 'primary' if shipment.status == 'In Transit' else 'warning' }}">{{ shipment.status }}</span></td>
+                        <td>{{ shipment.Origin or 'N/A' }}</td>
+                        <td>{{ shipment.Destination or 'N/A' }}</td>
+                        <td>{{ shipment.Required_Delivery_Date__c or 'N/A' }}</td>
+                        <td>
+                            <a href="{{ url_for('shipments.detail', shipment_id=shipment.Id) }}" class="btn btn-sm btn-primary">View</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="alert alert-info">
+            No shipments assigned yet
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Quick Actions</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('shipments.bulk_update') }}" class="btn btn-primary">Upload CSV Updates</a>
+                    <a href="{{ url_for('shipments.map_view') }}" class="btn btn-secondary">View Map</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Recent Alerts</h5>
+            </div>
+            <div class="card-body">
+                {% if recent_updates %}
+                <ul class="list-group">
+                    {% for update in recent_updates %}
+                    <li class="list-group-item">
+                        <span class="text-primary">{{ update.timestamp }}</span>
+                        <strong>{{ update.shipment_id }}</strong>: {{ update.status }}
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="alert alert-success">
+                    No alerts at this time
+                </div>
+                <p class="text-muted">All shipments are on track</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Shipment Status Distribution -->
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">Shipment Status Distribution</h5>
+    </div>
+    <div class="card-body">
+        <canvas id="statusChart" height="200"></canvas>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// Status distribution chart
+document.addEventListener('DOMContentLoaded', function() {
+    const statusChart = document.getElementById('statusChart').getContext('2d');
+    
+    // Create safe status_breakdown object if undefined
+    const statusBreakdown = {{ kpis.status_breakdown|default({})|tojson }};
+    
+    const statusLabels = Object.keys(statusBreakdown);
+    const statusValues = Object.values(statusBreakdown);
+    
+    if (statusLabels.length === 0) {
+        // No data case
+        new Chart(statusChart, {
+            type: 'bar',
+            data: {
+                labels: ['No Data'],
+                datasets: [{
+                    label: 'Status Distribution',
+                    data: [0],
+                    backgroundColor: ['#e0e0e0']
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                }
+            }
+        });
+    } else {
+        // With data case
+        new Chart(statusChart, {
+            type: 'bar',
+            data: {
+                labels: statusLabels,
+                datasets: [{
+                    label: 'Status Distribution',
+                    data: statusValues,
+                    backgroundColor: [
+                        '#3498db', // Blue
+                        '#2ecc71', // Green
+                        '#f39c12', // Yellow
+                        '#e74c3c', // Red
+                        '#9b59b6', // Purple
+                        '#1abc9c', // Teal
+                        '#e67e22'  // Orange
+                    ]
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                }
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

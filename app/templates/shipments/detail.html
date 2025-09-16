@@ -1,0 +1,704 @@
+<div class="row mb-3">
+    <div class="col-md-8">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('shipments.index') }}">Shipments</a></li>
+                <li class="breadcrumb-item active">{{ shipment.Name or 'Details' }}</li>
+            </ol>
+        </nav>
+        <h1 class="h3 text-dark mb-1">{{ shipment.Name }}</h1>
+        <p class="text-muted">{{ shipment.TFST_Service_Order_Number__c or 'Service Order #' }}</p>
+    </div>
+    <div class="col-md-4 text-md-end">
+        <div class="btn-group" role="group">
+            {% if current_user.can_update_shipments %}
+            <button type="button" class="btn btn-primary" id="updateStatusBtn">
+                <i class="fas fa-edit me-1"></i>Update Status
+            </button>
+            {% endif %}
+            {% if current_user.can_upload_documents %}
+            <button type="button" class="btn btn-outline-success" id="uploadDocBtn">
+                <i class="fas fa-camera me-1"></i>Documents
+            </button>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Status & Real-time Info -->
+<div class="row mb-4">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h5 class="text-muted mb-3">Current Status</h5>
+                        <div class="d-flex align-items-center mb-3">
+                            <span class="badge status-badge status-{{ (tracking_data.current_status or shipment.TFST_Status__c).lower().replace(' ', '-') if (tracking_data.current_status or shipment.TFST_Status__c) else 'unknown' }} me-3" style="font-size: 1rem; padding: 0.5rem 1rem;">
+                                {{ tracking_data.current_status or shipment.TFST_Status__c or 'Unknown' }}
+                            </span>
+                            {% if tracking_data and tracking_data.last_updated %}
+                            <small class="text-muted">
+                                <i class="fas fa-clock me-1"></i>
+                                Updated {{ moment(tracking_data.last_updated).fromNow() }}
+                            </small>
+                            {% endif %}
+                        </div>
+                        
+                        {% if tracking_data and tracking_data.driver_info %}
+                        <div class="driver-info mb-3">
+                            <h6 class="text-muted mb-2">Driver Information</h6>
+                            <p class="mb-1"><strong>{{ tracking_data.driver_info.name or 'N/A' }}</strong></p>
+                            {% if tracking_data.driver_info.phone %}
+                            <p class="mb-1"><i class="fas fa-phone me-2"></i>{{ tracking_data.driver_info.phone }}</p>
+                            {% endif %}
+                            {% if tracking_data.driver_info.truck_number %}
+                            <p class="mb-0"><i class="fas fa-truck me-2"></i>{{ tracking_data.driver_info.truck_number }}</p>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                        
+                        {% if tracking_data and tracking_data.location %}
+                        <div class="location-info">
+                            <h6 class="text-muted mb-2">Current Location</h6>
+                            <p class="mb-1">
+                                <i class="fas fa-map-marker-alt me-2"></i>
+                                {{ tracking_data.location.lat|round(4) }}, {{ tracking_data.location.lng|round(4) }}
+                            </p>
+                            <button type="button" class="btn btn-sm btn-outline-info" onclick="showLocationOnMap({{ tracking_data.location.lat }}, {{ tracking_data.location.lng }})">
+                                <i class="fas fa-map me-1"></i>View on Map
+                            </button>
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <h5 class="text-muted mb-3">Shipment Details</h5>
+                        <div class="detail-row mb-2">
+                            <span class="text-muted">Project:</span>
+                            <strong class="ms-2">{{ shipment.TFST_Project_Reference__c or 'N/A' }}</strong>
+                        </div>
+                        <div class="detail-row mb-2">
+                            <span class="text-muted">Service Level:</span>
+                            <span class="badge bg-{{ 'danger' if shipment.TFST_Service_Level__c == 'Urgent' else 'secondary' }} ms-2">
+                                {{ shipment.TFST_Service_Level__c or 'Standard' }}
+                            </span>
+                        </div>
+                        <div class="detail-row mb-2">
+                            <span class="text-muted">Weight:</span>
+                            <strong class="ms-2">{{ shipment.TFST_Total_Weight__c or 'N/A' }}{% if shipment.TFST_Total_Weight__c %} lbs{% endif %}</strong>
+                        </div>
+                        <div class="detail-row mb-2">
+                            <span class="text-muted">Volume:</span>
+                            <strong class="ms-2">{{ shipment.TFST_Total_Volume__c or 'N/A' }}{% if shipment.TFST_Total_Volume__c %} ft³{% endif %}</strong>
+                        </div>
+                        <div class="detail-row mb-2">
+                            <span class="text-muted">Pickup Date:</span>
+                            <strong class="ms-2">{{ shipment.PickUp_Date__c or 'N/A' }}</strong>
+                        </div>
+                        <div class="detail-row mb-2">
+                            <span class="text-muted">Delivery Date:</span>
+                            <strong class="ms-2">{{ shipment.Required_Delivery_Date__c or 'N/A' }}</strong>
+                        </div>
+                    </div>
+                </div>
+                
+                {% if shipment.Special_Instructions__c %}
+                <div class="mt-4">
+                    <h6 class="text-muted mb-2">Special Instructions</h6>
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>{{ shipment.Special_Instructions__c }}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Live Map -->
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-map-marked-alt me-2"></i>Live Location
+                </h5>
+            </div>
+            <div class="card-body p-0">
+                <div id="liveMap" style="height: 300px; position: relative;">
+                    {% if tracking_data and tracking_data.location %}
+                    <div id="mapContainer"></div>
+                    {% else %}
+                    <div class="d-flex align-items-center justify-content-center h-100 bg-light">
+                        <div class="text-center text-muted">
+                            <i class="fas fa-map-marker-alt fa-2x mb-2"></i>
+                            <p>No location data available</p>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Shipment Stages -->
+{% if shipment_stages %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-route me-2"></i>Shipment Stages
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% for stage in shipment_stages %}
+                    <div class="col-md-6 col-lg-4 mb-3">
+                        <div class="card border-left-{{ 'success' if stage.TFST_Actual_End__c else ('primary' if stage.TFST_Actual_Start__c else 'secondary') }}">
+                            <div class="card-body py-3">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <h6 class="mb-0">Stage {{ stage.TFST_Stage_Number__c }}</h6>
+                                    <span class="badge bg-{{ 'success' if stage.TFST_Actual_End__c else ('primary' if stage.TFST_Actual_Start__c else 'secondary') }}">
+                                        {{ 'Complete' if stage.TFST_Actual_End__c else ('In Progress' if stage.TFST_Actual_Start__c else 'Pending') }}
+                                    </span>
+                                </div>
+                                <p class="text-muted mb-2">{{ stage.TFST_Stage_Type__c }}</p>
+                                <small class="text-muted">
+                                    <i class="fas fa-map-marker-alt me-1"></i>
+                                    {{ stage.TFST_Pickup_Location_Name__c }} → {{ stage.TFST_Delivery_Location_Name__c }}
+                                </small>
+                                {% if stage.TFST_Scheduled_Start__c %}
+                                <div class="mt-2">
+                                    <small class="text-muted">
+                                        <i class="fas fa-calendar me-1"></i>
+                                        {{ moment(stage.TFST_Scheduled_Start__c).format('MM/DD/YYYY HH:mm') }}
+                                    </small>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Status History & Documents -->
+<div class="row">
+    <!-- Status History -->
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-history me-2"></i>Status History
+                </h5>
+                <button type="button" class="btn btn-sm btn-outline-primary" id="refreshHistoryBtn">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+            </div>
+            <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                <div id="statusHistory">
+                    {% if status_history %}
+                    <div class="timeline">
+                        {% for history_item in status_history %}
+                        <div class="timeline-item">
+                            <div class="timeline-marker bg-{{ 'success' if history_item.status == 'Delivered' else 'primary' }}"></div>
+                            <div class="timeline-content">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <h6 class="mb-1">{{ history_item.status }}</h6>
+                                        {% if history_item.notes %}
+                                        <p class="text-muted mb-1">{{ history_item.notes }}</p>
+                                        {% endif %}
+                                        {% if history_item.location %}
+                                        <small class="text-muted">
+                                            <i class="fas fa-map-marker-alt me-1"></i>
+                                            {{ history_item.location.lat|round(4) }}, {{ history_item.location.lng|round(4) }}
+                                        </small>
+                                        {% endif %}
+                                    </div>
+                                    <small class="text-muted">
+                                        {{ moment(history_item.timestamp).format('MM/DD HH:mm') }}
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-history fa-2x text-muted mb-2"></i>
+                        <p class="text-muted">No status history available</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Documents -->
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-file-image me-2"></i>Documents & Photos
+                </h5>
+                {% if current_user.can_upload_documents %}
+                <button type="button" class="btn btn-sm btn-primary" id="uploadPhotoBtn">
+                    <i class="fas fa-plus me-1"></i>Add
+                </button>
+                {% endif %}
+            </div>
+            <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                <div id="documentsContainer">
+                    {% if documents %}
+                        {% for doc_type, doc_list in documents.items() %}
+                        {% if doc_list %}
+                        <div class="document-category mb-3">
+                            <h6 class="text-muted mb-2">{{ doc_type.replace('_', ' ').title() }}</h6>
+                            <div class="row">
+                                {% for doc in doc_list %}
+                                <div class="col-md-6 mb-2">
+                                    <div class="document-item border rounded p-2">
+                                        {% if doc.url.endswith(('.jpg', '.jpeg', '.png', '.gif')) %}
+                                        <img src="{{ doc.url }}" class="img-thumbnail mb-2" style="width: 100%; height: 120px; object-fit: cover;" onclick="showImageModal('{{ doc.url }}', '{{ doc.filename }}')">
+                                        {% else %}
+                                        <div class="text-center py-3">
+                                            <i class="fas fa-file fa-2x text-muted"></i>
+                                        </div>
+                                        {% endif %}
+                                        <div class="text-center">
+                                            <small class="text-muted d-block">{{ doc.filename }}</small>
+                                            <small class="text-muted">{{ moment(doc.uploaded_at).fromNow() }}</small>
+                                            <div class="mt-1">
+                                                <a href="{{ doc.url }}" target="_blank" class="btn btn-xs btn-outline-primary">
+                                                    <i class="fas fa-external-link-alt"></i>
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% endfor %}
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-camera fa-2x text-muted mb-2"></i>
+                        <p class="text-muted">No documents uploaded</p>
+                        {% if current_user.can_upload_documents %}
+                        <button type="button" class="btn btn-sm btn-primary" onclick="$('#uploadPhotoBtn').click()">
+                            Upload Photos
+                        </button>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Status Update Modal -->
+<div class="modal fade" id="statusUpdateModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Update Shipment Status</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="statusUpdateForm">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Status <span class="text-danger">*</span></label>
+                            <select class="form-select" id="statusSelect" required>
+                                <option value="">Select Status</option>
+                                <option value="Dispatched">Dispatched</option>
+                                <option value="At pickup site">At pickup site</option>
+                                <option value="Pickup Complete">Pickup Complete</option>
+                                <option value="In Transit">In Transit</option>
+                                <option value="Delayed">Delayed</option>
+                                <option value="Arrived at site">Arrived at site</option>
+                                <option value="Delivered">Delivered</option>
+                                <option value="Unloading complete">Unloading complete</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Driver Name</label>
+                            <input type="text" class="form-control" id="driverName" placeholder="John Doe">
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Current Location (Latitude)</label>
+                            <input type="number" class="form-control" id="latitude" step="any" placeholder="32.7767">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Current Location (Longitude)</label>
+                            <input type="number" class="form-control" id="longitude" step="any" placeholder="-96.7970">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Notes</label>
+                        <textarea class="form-control" id="statusNotes" rows="3" placeholder="Additional notes about this status update..."></textarea>
+                    </div>
+                    
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        This update will be synced with your mobile driver app and reflected in real-time tracking.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-1"></i>Update Status
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Document Upload Modal -->
+<div class="modal fade" id="documentUploadModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Upload Documents</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Document Type</label>
+                    <select class="form-select" id="documentType">
+                        <option value="general">General</option>
+                        <option value="pickup_photos">Pickup Photos</option>
+                        <option value="delivery_photos">Delivery Photos</option>
+                        <option value="pod_documents">Proof of Delivery</option>
+                        <option value="damage_reports">Damage Reports</option>
+                    </select>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label">Select Files</label>
+                    <input type="file" class="form-control" id="documentFiles" multiple accept="image/*,.pdf">
+                    <small class="form-text text-muted">You can select multiple images or PDF files (Max 16MB each)</small>
+                </div>
+                
+                <div id="uploadPreview" class="row"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="uploadDocumentsBtn">
+                    <i class="fas fa-upload me-1"></i>Upload
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Image Preview Modal -->
+<div class="modal fade" id="imageModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="imageModalTitle">Image Preview</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center">
+                <img id="imageModalContent" class="img-fluid" style="max-height: 70vh;">
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.timeline {
+    position: relative;
+    padding-left: 30px;
+}
+
+.timeline-item {
+    position: relative;
+    margin-bottom: 25px;
+}
+
+.timeline-item:not(:last-child)::before {
+    content: '';
+    position: absolute;
+    left: -25px;
+    top: 25px;
+    width: 2px;
+    height: calc(100% + 10px);
+    background: #e9ecef;
+}
+
+.timeline-marker {
+    position: absolute;
+    left: -30px;
+    top: 5px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 3px #e9ecef;
+}
+
+.timeline-content {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+    border-left: 3px solid #007bff;
+}
+
+.border-left-primary { border-left: 4px solid #007bff !important; }
+.border-left-success { border-left: 4px solid #28a745 !important; }
+.border-left-secondary { border-left: 4px solid #6c757d !important; }
+
+.document-item {
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.document-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.btn-xs {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
+<!-- Google Maps API (you'll need to add your API key) -->
+<script async defer src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&callback=initMap"></script>
+
+<script>
+let map;
+let shipmentMarker;
+
+$(document).ready(function() {
+    // Initialize real-time updates
+    if (typeof io !== 'undefined') {
+        const socket = io();
+        
+        socket.on('shipment_update', function(data) {
+            if (data.shipment_id === '{{ shipment.Id }}') {
+                updateShipmentDisplay(data);
+            }
+        });
+    }
+    
+    // Status update form
+    $('#statusUpdateForm').submit(function(e) {
+        e.preventDefault();
+        
+        const updateData = {
+            status: $('#statusSelect').val(),
+            notes: $('#statusNotes').val()
+        };
+        
+        const lat = parseFloat($('#latitude').val());
+        const lng = parseFloat($('#longitude').val());
+        const driverName = $('#driverName').val().trim();
+        
+        if (lat && lng && !isNaN(lat) && !isNaN(lng)) {
+            updateData.location = { lat: lat, lng: lng };
+        }
+        
+        if (driverName) {
+            updateData.driver_info = { name: driverName };
+        }
+        
+        if (!updateData.status) {
+            TFST.showAlert('Please select a status', 'warning');
+            return;
+        }
+        
+        TFST.showLoading();
+        
+        $.ajax({
+            url: '{{ url_for("shipments.update_status", shipment_id=shipment.Id) }}',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(updateData),
+            success: function(response) {
+                TFST.hideLoading();
+                $('#statusUpdateModal').modal('hide');
+                
+                if (response.success) {
+                    TFST.showAlert('Status updated successfully', 'success');
+                    // Reload page to show updates
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    TFST.showAlert('Failed to update status: ' + (response.error || 'Unknown error'), 'danger');
+                }
+            },
+            error: function(xhr) {
+                TFST.hideLoading();
+                const response = xhr.responseJSON || {};
+                TFST.showAlert('Failed to update status: ' + (response.error || 'Server error'), 'danger');
+            }
+        });
+    });
+    
+    // Document upload
+    $('#documentFiles').change(function() {
+        const files = this.files;
+        const preview = $('#uploadPreview');
+        preview.empty();
+        
+        Array.from(files).forEach(file => {
+            if (file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    preview.append(`
+                        <div class="col-md-4 mb-2">
+                            <img src="${e.target.result}" class="img-thumbnail" style="height: 100px; width: 100%; object-fit: cover;">
+                            <small class="d-block text-center">${file.name}</small>
+                        </div>
+                    `);
+                };
+                reader.readAsDataURL(file);
+            } else {
+                preview.append(`
+                    <div class="col-md-4 mb-2">
+                        <div class="text-center border rounded p-3">
+                            <i class="fas fa-file fa-2x text-muted mb-2"></i>
+                            <small class="d-block">${file.name}</small>
+                        </div>
+                    </div>
+                `);
+            }
+        });
+    });
+    
+    $('#uploadDocumentsBtn').click(function() {
+        const files = document.getElementById('documentFiles').files;
+        const documentType = $('#documentType').val();
+        
+        if (files.length === 0) {
+            TFST.showAlert('Please select files to upload', 'warning');
+            return;
+        }
+        
+        TFST.showLoading();
+        
+        const uploadPromises = Array.from(files).map(file => {
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('document_type', documentType);
+            
+            return fetch('{{ url_for("shipments.upload_document", shipment_id=shipment.Id) }}', {
+                method: 'POST',
+                body: formData
+            }).then(response => response.json());
+        });
+        
+        Promise.all(uploadPromises).then(results => {
+            TFST.hideLoading();
+            $('#documentUploadModal').modal('hide');
+            
+            const successful = results.filter(r => r.success).length;
+            const failed = results.length - successful;
+            
+            if (successful > 0) {
+                TFST.showAlert(`${successful} document(s) uploaded successfully`, 'success');
+                // Reload documents section
+                setTimeout(() => location.reload(), 1500);
+            }
+            if (failed > 0) {
+                TFST.showAlert(`${failed} document(s) failed to upload`, 'warning');
+            }
+        }).catch(error => {
+            TFST.hideLoading();
+            TFST.showAlert('Upload failed. Please try again.', 'danger');
+        });
+    });
+    
+    // Button event handlers
+    $('#updateStatusBtn').click(() => {
+        {% if tracking_data and tracking_data.current_status %}
+        $('#statusSelect').val('{{ tracking_data.current_status }}');
+        {% endif %}
+        $('#statusUpdateModal').modal('show');
+    });
+    
+    $('#uploadDocBtn, #uploadPhotoBtn').click(() => {
+        $('#documentUploadModal').modal('show');
+    });
+    
+    $('#refreshHistoryBtn').click(() => {
+        location.reload();
+    });
+});
+
+// Google Maps integration
+function initMap() {
+    {% if tracking_data and tracking_data.location %}
+    const location = { lat: {{ tracking_data.location.lat }}, lng: {{ tracking_data.location.lng }} };
+    
+    map = new google.maps.Map(document.getElementById('mapContainer'), {
+        zoom: 13,
+        center: location,
+        mapTypeControl: false,
+        streetViewControl: false
+    });
+    
+    shipmentMarker = new google.maps.Marker({
+        position: location,
+        map: map,
+        title: '{{ shipment.Name }}',
+        icon: {
+            url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png'
+        }
+    });
+    {% endif %}
+}
+
+function showLocationOnMap(lat, lng) {
+    if (map && shipmentMarker) {
+        const location = { lat: lat, lng: lng };
+        map.setCenter(location);
+        map.setZoom(15);
+        shipmentMarker.setPosition(location);
+    }
+}
+
+function showImageModal(url, filename) {
+    $('#imageModalTitle').text(filename);
+    $('#imageModalContent').attr('src', url);
+    $('#imageModal').modal('show');
+}
+
+function updateShipmentDisplay(data) {
+    // Update status badge
+    const statusBadge = $('.status-badge');
+    statusBadge.removeClass().addClass('badge status-badge status-' + data.current_status.toLowerCase().replace(' ', '-'));
+    statusBadge.text(data.current_status);
+    
+    // Update location if available
+    if (data.location && map && shipmentMarker) {
+        const newPosition = { lat: data.location.lat, lng: data.location.lng };
+        shipmentMarker.setPosition(newPosition);
+        map.setCenter(newPosition);
+    }
+    
+    // Show notification
+    TFST.showAlert(`Shipment status updated to: ${data.current_status}`, 'info');
+}
+</script>

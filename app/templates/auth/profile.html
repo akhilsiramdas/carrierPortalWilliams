@@ -1,0 +1,92 @@
+<div class="row">
+    <div class="col-lg-8 mx-auto">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="card-title mb-0">
+                    <i class="fas fa-user me-2"></i>User Profile
+                </h4>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4 text-center mb-4">
+                        <div class="profile-avatar">
+                            <i class="fas fa-user-circle fa-5x text-muted mb-3"></i>
+                            <h5>{{ current_user.name }}</h5>
+                            <p class="text-muted">{{ current_user.company_name or 'Carrier User' }}</p>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-8">
+                        <div class="profile-info">
+                            <div class="row mb-3">
+                                <div class="col-sm-4"><strong>Name:</strong></div>
+                                <div class="col-sm-8">{{ current_user.name }}</div>
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col-sm-4"><strong>Email:</strong></div>
+                                <div class="col-sm-8">{{ current_user.email }}</div>
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col-sm-4"><strong>Company:</strong></div>
+                                <div class="col-sm-8">{{ current_user.company_name or 'N/A' }}</div>
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col-sm-4"><strong>Phone:</strong></div>
+                                <div class="col-sm-8">{{ current_user.phone_number or 'N/A' }}</div>
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col-sm-4"><strong>Last Login:</strong></div>
+                                <div class="col-sm-8">
+                                    {% if current_user.last_login %}
+                                        {{ moment(current_user.last_login).format('MM/DD/YYYY HH:mm') }}
+                                    {% else %}
+                                        N/A
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col-sm-4"><strong>Account Status:</strong></div>
+                                <div class="col-sm-8">
+                                    <span class="badge bg-{{ 'success' if current_user.is_active else 'danger' }}">
+                                        {{ 'Active' if current_user.is_active else 'Inactive' }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <hr>
+                
+                <h5 class="mb-3">Permissions</h5>
+                <div class="row">
+                    <div class="col-md-4 mb-2">
+                        <div class="permission-item">
+                            <i class="fas fa-{{ 'check text-success' if current_user.can_update_shipments else 'times text-danger' }} me-2"></i>
+                            Update Shipments
+                        </div>
+                    </div>
+                    <div class="col-md-4 mb-2">
+                        <div class="permission-item">
+                            <i class="fas fa-{{ 'check text-success' if current_user.can_upload_documents else 'times text-danger' }} me-2"></i>
+                            Upload Documents
+                        </div>
+                    </div>
+                    <div class="col-md-4 mb-2">
+                        <div class="permission-item">
+                            <i class="fas fa-{{ 'check text-success' if current_user.can_view_analytics else 'times text-danger' }} me-2"></i>
+                            View Analytics
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mt-4 text-center">
+                    <small class="text-muted">
+                        Profile information is managed by your administrator. 
+                        Contact support if you need to update your details.
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

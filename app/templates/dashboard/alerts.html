@@ -1,0 +1,398 @@
+<div class="row mb-4">
+    <div class="col-md-8">
+        <h1 class="h3 text-dark mb-1">Alerts & Notifications</h1>
+        <p class="text-muted">Real-time alerts for your shipments and operations</p>
+    </div>
+    <div class="col-md-4 text-md-end">
+        <button type="button" class="btn btn-outline-primary" id="markAllReadBtn">
+            <i class="fas fa-check-double me-1"></i>Mark All Read
+        </button>
+    </div>
+</div>
+
+<!-- Alert Summary Cards -->
+<div class="row mb-4">
+    <div class="col-md-3 mb-3">
+        <div class="card border-danger">
+            <div class="card-body text-center">
+                <h3 class="text-danger">{{ urgent_shipments|length }}</h3>
+                <p class="mb-0">Urgent Shipments</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card border-warning">
+            <div class="card-body text-center">
+                <h3 class="text-warning">{{ delayed_shipments|length }}</h3>
+                <p class="mb-0">Delayed Shipments</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card border-info">
+            <div class="card-body text-center">
+                <h3 class="text-info">{{ delivery_alerts|length }}</h3>
+                <p class="mb-0">Delivery Alerts</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card border-success">
+            <div class="card-body text-center">
+                <h3 class="text-success" id="liveUpdatesCount">0</h3>
+                <p class="mb-0">Live Updates</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Alert Tabs -->
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <ul class="nav nav-tabs card-header-tabs" id="alertTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="urgent-tab" data-bs-toggle="tab" 
+                                data-bs-target="#urgent" type="button" role="tab">
+                            <i class="fas fa-exclamation-triangle me-1"></i>Urgent
+                            <span class="badge bg-danger ms-1">{{ urgent_shipments|length }}</span>
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="delayed-tab" data-bs-toggle="tab" 
+                                data-bs-target="#delayed" type="button" role="tab">
+                            <i class="fas fa-clock me-1"></i>Delayed
+                            <span class="badge bg-warning ms-1">{{ delayed_shipments|length }}</span>
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="delivery-tab" data-bs-toggle="tab" 
+                                data-bs-target="#delivery" type="button" role="tab">
+                            <i class="fas fa-truck me-1"></i>Delivery Alerts
+                            <span class="badge bg-info ms-1">{{ delivery_alerts|length }}</span>
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="live-tab" data-bs-toggle="tab" 
+                                data-bs-target="#live" type="button" role="tab">
+                            <i class="fas fa-satellite me-1"></i>Live Updates
+                        </button>
+                    </li>
+                </ul>
+            </div>
+            
+            <div class="card-body">
+                <div class="tab-content" id="alertTabContent">
+                    <!-- Urgent Shipments -->
+                    <div class="tab-pane fade show active" id="urgent" role="tabpanel">
+                        {% if urgent_shipments %}
+                        <div class="alert-list">
+                            {% for shipment in urgent_shipments %}
+                            <div class="alert-item border-start border-danger border-4 p-3 mb-3 bg-light">
+                                <div class="row align-items-center">
+                                    <div class="col-md-8">
+                                        <div class="d-flex align-items-center mb-2">
+                                            <i class="fas fa-exclamation-triangle text-danger me-2"></i>
+                                            <h6 class="mb-0">{{ shipment.Name }}</h6>
+                                            <span class="badge bg-danger ms-2">URGENT</span>
+                                        </div>
+                                        <p class="mb-1 text-muted">{{ shipment.TFST_Project_Reference__c }}</p>
+                                        <small class="text-danger">
+                                            <strong>Service Level:</strong> {{ shipment.TFST_Service_Level__c }}
+                                            {% if shipment.Critical_Path %}
+                                            | <strong>Critical Path Item</strong>
+                                            {% endif %}
+                                        </small>
+                                    </div>
+                                    <div class="col-md-4 text-md-end">
+                                        <div class="btn-group" role="group">
+                                            <a href="{{ url_for('shipments.detail', shipment_id=shipment.Id) }}" 
+                                               class="btn btn-sm btn-outline-primary">
+                                                <i class="fas fa-eye"></i>
+                                            </a>
+                                            <button type="button" class="btn btn-sm btn-outline-success"
+                                                    onclick="quickStatusUpdate('{{ shipment.Id }}')">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+                            <h5 class="text-success">No Urgent Shipments</h5>
+                            <p class="text-muted">All shipments are operating normally</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Delayed Shipments -->
+                    <div class="tab-pane fade" id="delayed" role="tabpanel">
+                        {% if delayed_shipments %}
+                        <div class="alert-list">
+                            {% for shipment in delayed_shipments %}
+                            <div class="alert-item border-start border-warning border-4 p-3 mb-3 bg-light">
+                                <div class="row align-items-center">
+                                    <div class="col-md-8">
+                                        <div class="d-flex align-items-center mb-2">
+                                            <i class="fas fa-clock text-warning me-2"></i>
+                                            <h6 class="mb-0">{{ shipment.Name }}</h6>
+                                            <span class="badge bg-warning text-dark ms-2">DELAYED</span>
+                                        </div>
+                                        <p class="mb-1 text-muted">{{ shipment.TFST_Project_Reference__c }}</p>
+                                        <small class="text-warning">
+                                            <strong>Expected:</strong> {{ shipment.Required_Delivery_Date__c }}
+                                            <strong>Status:</strong> {{ shipment.TFST_Status__c }}
+                                        </small>
+                                    </div>
+                                    <div class="col-md-4 text-md-end">
+                                        <div class="btn-group" role="group">
+                                            <a href="{{ url_for('shipments.detail', shipment_id=shipment.Id) }}" 
+                                               class="btn btn-sm btn-outline-primary">
+                                                <i class="fas fa-eye"></i>
+                                            </a>
+                                            <button type="button" class="btn btn-sm btn-outline-success"
+                                                    onclick="quickStatusUpdate('{{ shipment.Id }}')">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-tachometer-alt fa-3x text-success mb-3"></i>
+                            <h5 class="text-success">No Delays</h5>
+                            <p class="text-muted">All shipments are on schedule</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Delivery Alerts -->
+                    <div class="tab-pane fade" id="delivery" role="tabpanel">
+                        {% if delivery_alerts %}
+                        <div class="alert-list">
+                            {% for alert in delivery_alerts %}
+                            <div class="alert-item border-start border-info border-4 p-3 mb-3 bg-light">
+                                <div class="row align-items-center">
+                                    <div class="col-md-8">
+                                        <div class="d-flex align-items-center mb-2">
+                                            <i class="fas fa-truck text-info me-2"></i>
+                                            <h6 class="mb-0">{{ alert.shipment.Name }}</h6>
+                                            <span class="badge bg-info ms-2">
+                                                DUE {{ 'TODAY' if alert.days_until == 0 else 'IN ' + alert.days_until|string + ' DAYS' }}
+                                            </span>
+                                        </div>
+                                        <p class="mb-1 text-muted">{{ alert.shipment.TFST_Project_Reference__c }}</p>
+                                        <small class="text-info">
+                                            <strong>Delivery Date:</strong> {{ alert.delivery_date }}
+                                            <strong>Status:</strong> {{ alert.shipment.TFST_Status__c }}
+                                        </small>
+                                    </div>
+                                    <div class="col-md-4 text-md-end">
+                                        <div class="btn-group" role="group">
+                                            <a href="{{ url_for('shipments.detail', shipment_id=alert.shipment.Id) }}" 
+                                               class="btn btn-sm btn-outline-primary">
+                                                <i class="fas fa-eye"></i>
+                                            </a>
+                                            <button type="button" class="btn btn-sm btn-outline-success"
+                                                    onclick="quickStatusUpdate('{{ alert.shipment.Id }}')">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-calendar-check fa-3x text-success mb-3"></i>
+                            <h5 class="text-success">No Upcoming Deliveries</h5>
+                            <p class="text-muted">No deliveries scheduled for the next 2 days</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Live Updates -->
+                    <div class="tab-pane fade" id="live" role="tabpanel">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6 class="mb-0">Real-time Updates</h6>
+                            <div class="connection-status">
+                                <span class="badge bg-success" id="connectionStatus">
+                                    <i class="fas fa-circle"></i> Connected
+                                </span>
+                            </div>
+                        </div>
+                        
+                        <div id="liveUpdatesFeed" style="max-height: 400px; overflow-y: auto;">
+                            <div class="text-center py-4 text-muted" id="noUpdatesMessage">
+                                <i class="fas fa-satellite fa-2x mb-3"></i>
+                                <p>Waiting for live updates...</p>
+                                <small>Updates from your mobile driver app will appear here in real-time</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+<script>
+$(document).ready(function() {
+    // Initialize WebSocket connection
+    const socket = io();
+    let liveUpdatesCount = 0;
+    
+    socket.on('connect', function() {
+        $('#connectionStatus').html('<i class="fas fa-circle"></i> Connected').removeClass('bg-danger').addClass('bg-success');
+        console.log('Connected to WebSocket');
+    });
+    
+    socket.on('disconnect', function() {
+        $('#connectionStatus').html('<i class="fas fa-circle"></i> Disconnected').removeClass('bg-success').addClass('bg-danger');
+        console.log('Disconnected from WebSocket');
+    });
+    
+    // Handle real-time shipment updates
+    socket.on('shipment_update', function(data) {
+        addLiveUpdate(data);
+        updateAlertCounts();
+        
+        // Show notification
+        if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification('Shipment Update', {
+                body: `${data.shipment_id}: ${data.current_status}`,
+                icon: '/static/images/icon-192.png'
+            });
+        }
+    });
+    
+    // Handle mobile app updates
+    socket.on('mobile_update', function(data) {
+        addLiveUpdate({
+            ...data,
+            source: 'Mobile Driver App',
+            icon: 'fas fa-mobile-alt'
+        });
+        updateAlertCounts();
+    });
+    
+    // Handle emergency alerts
+    socket.on('emergency_alert', function(data) {
+        addEmergencyAlert(data);
+        
+        // Show browser notification
+        if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification('EMERGENCY ALERT', {
+                body: data.alert_message,
+                icon: '/static/images/icon-192.png',
+                tag: 'emergency'
+            });
+        }
+        
+        // Play alert sound (you could add an audio element)
+        console.log('Emergency alert:', data);
+    });
+    
+    function addLiveUpdate(data) {
+        const timestamp = moment(data.timestamp).format('HH:mm:ss');
+        const icon = data.icon || 'fas fa-shipping-fast';
+        const source = data.source || 'System';
+        
+        const updateHtml = `
+            <div class="live-update-item border-bottom py-2 animate__animated animate__fadeInDown">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div class="flex-grow-1">
+                        <div class="d-flex align-items-center mb-1">
+                            <i class="${icon} text-primary me-2"></i>
+                            <strong>${data.shipment_id}</strong>
+                            <span class="badge bg-primary ms-2">${data.current_status}</span>
+                        </div>
+                        ${data.location ? `
+                        <small class="text-muted">
+                            <i class="fas fa-map-marker-alt me-1"></i>
+                            ${data.location.lat.toFixed(4)}, ${data.location.lng.toFixed(4)}
+                        </small>
+                        ` : ''}
+                        ${data.driver_info && data.driver_info.name ? `
+                        <br><small class="text-muted">
+                            <i class="fas fa-user me-1"></i>${data.driver_info.name}
+                        </small>
+                        ` : ''}
+                    </div>
+                    <div class="text-end">
+                        <small class="text-muted">${timestamp}</small>
+                        <br><small class="text-muted">${source}</small>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        $('#noUpdatesMessage').hide();
+        $('#liveUpdatesFeed').prepend(updateHtml);
+        
+        // Keep only last 50 updates
+        $('.live-update-item').slice(50).remove();
+        
+        // Update counter
+        liveUpdatesCount++;
+        $('#liveUpdatesCount').text(liveUpdatesCount);
+    }
+    
+    function addEmergencyAlert(data) {
+        const alertHtml = `
+            <div class="alert alert-danger alert-dismissible fade show animate__animated animate__pulse" role="alert">
+                <div class="d-flex align-items-center">
+                    <i class="fas fa-exclamation-triangle fa-2x me-3"></i>
+                    <div>
+                        <strong>EMERGENCY ALERT</strong><br>
+                        <strong>Shipment:</strong> ${data.shipment_id}<br>
+                        <strong>Message:</strong> ${data.alert_message}
+                        ${data.location ? `<br><strong>Location:</strong> ${data.location.lat}, ${data.location.lng}` : ''}
+                    </div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        `;
+        
+        $('.tab-content').before(alertHtml);
+    }
+    
+    function updateAlertCounts() {
+        // This would update alert counts based on new data
+        // For now, just increment live updates
+        $('#liveUpdatesCount').text(liveUpdatesCount);
+    }
+    
+    // Request notification permission
+    if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
+    }
+    
+    // Mark all as read functionality
+    $('#markAllReadBtn').click(function() {
+        $('.alert-item').addClass('opacity-50');
+        TFST.showAlert('All alerts marked as read', 'success');
+    });
+    
+    // Auto-refresh alerts every 5 minutes
+    setInterval(function() {
+        // This would refresh alert data
+        console.log('Refreshing alerts...');
+    }, 300000);
+});
+
+function quickStatusUpdate(shipmentId) {
+    // Quick status update modal would be implemented here
+    TFST.showAlert(`Quick status update for ${shipmentId} would open here`, 'info');
+}
+</script>
