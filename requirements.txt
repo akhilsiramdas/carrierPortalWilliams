@@ -1,7 +1,7 @@
 # TFST Carrier Portal - Python Dependencies
 
 # Flask Framework
-Flask==3.0.0
+Flask==2.3.3
 Flask-SQLAlchemy==3.1.1
 Flask-Migrate==4.0.5
 Flask-Login==0.6.3
@@ -38,7 +38,7 @@ python-dotenv==1.0.0
 python-dateutil==2.8.2
 pytz==2023.3
 uuid==1.30
-Werkzeug==3.0.1
+Werkzeug==2.3.8
 
 # Web Server (Production)
 waitress==2.1.2
