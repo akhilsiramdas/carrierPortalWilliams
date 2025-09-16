@@ -52,9 +52,6 @@ class Config:
     UPLOAD_FOLDER = 'uploads'
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'pdf', 'csv'}
     
-    # Redis Configuration (for caching if needed)
-    REDIS_URL = os.environ.get('REDIS_URL')
-    
     # Logging Configuration
     LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')
 
