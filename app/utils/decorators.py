@@ -8,9 +8,11 @@ TFST Carrier Portal - Utility Package
 TFST Carrier Portal - Custom Decorators
 """
 from functools import wraps
-from flask import session, redirect, url_for, request, jsonify
+from flask import session, redirect, url_for, request, jsonify, flash
 from flask_login import current_user
 import logging
+from app.services.salesforce_service import salesforce_service
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +35,34 @@ def require_permissions(*permissions):
             return f(*args, **kwargs)
         return decorated_function
     return decorator
+
+def salesforce_token_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'sf_access_token' not in session:
+            flash('Please log in to access this page.', 'warning')
+            return redirect(url_for('auth.login'))
+
+        # Check if the access token is expired
+        expires_at = session.get('sf_access_token_expires_at')
+        if expires_at and datetime.utcnow() >= datetime.fromisoformat(expires_at):
+            if 'sf_refresh_token' not in session:
+                flash('Your session has expired. Please log in again.', 'warning')
+                return redirect(url_for('auth.logout'))
+
+            try:
+                # Refresh the token
+                new_token_response = salesforce_service.refresh_access_token(session['sf_refresh_token'])
+                session['sf_access_token'] = new_token_response['access_token']
+                # Salesforce tokens typically last for 2 hours
+                session['sf_access_token_expires_at'] = (datetime.utcnow() + timedelta(hours=2)).isoformat()
+            except Exception as e:
+                logger.error(f"Failed to refresh Salesforce token: {str(e)}")
+                flash('Your session could not be refreshed. Please log in again.', 'error')
+                return redirect(url_for('auth.logout'))
+
+        return f(*args, **kwargs)
+    return decorated_function
 
 def require_carrier_access(f):
     """Decorator to ensure user has valid carrier access"""

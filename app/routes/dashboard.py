@@ -5,6 +5,7 @@ Main carrier dashboard with shipment overview and KPIs
 from flask import Blueprint, render_template, request, jsonify, session, current_app
 from flask_login import login_required, current_user
 from app.services.salesforce_service import salesforce_service
+from app.utils.decorators import salesforce_token_required
 from app.services.firebase_service import firebase_service
 from datetime import datetime, timedelta
 import logging
@@ -14,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 @dashboard_bp.route('/')
 @login_required
+@salesforce_token_required
 def index():
     """Main carrier dashboard"""
     try:
@@ -69,6 +71,7 @@ def index():
     
 @dashboard_bp.route('/api/kpis')
 @login_required
+@salesforce_token_required
 def get_kpis():
     """API endpoint for KPI data"""
     try:
@@ -96,6 +99,7 @@ def get_kpis():
 
 @dashboard_bp.route('/api/shipments/summary')
 @login_required
+@salesforce_token_required
 def get_shipments_summary():
     """API endpoint for shipments summary"""
     try:
@@ -143,6 +147,7 @@ def get_shipments_summary():
 
 @dashboard_bp.route('/api/performance')
 @login_required
+@salesforce_token_required
 def get_performance_metrics():
     """API endpoint for carrier performance metrics"""
     try:
@@ -170,6 +175,7 @@ def get_performance_metrics():
 
 @dashboard_bp.route('/alerts')
 @login_required
+@salesforce_token_required
 def alerts():
     """Display carrier alerts and notifications"""
     try:
@@ -193,6 +199,7 @@ def alerts():
 
 @dashboard_bp.route('/analytics')
 @login_required
+@salesforce_token_required
 def analytics():
     """Carrier analytics and performance dashboard"""
     if not current_user.can_view_analytics:
