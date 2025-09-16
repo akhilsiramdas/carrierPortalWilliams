@@ -41,7 +41,6 @@ uuid==1.30
 Werkzeug==3.0.1
 
 # Web Server (Production)
-gunicorn==21.2.0
 waitress==2.1.2
 
 # Development & Testing
@@ -77,6 +76,3 @@ Pillow==10.1.0
 
 # Caching
 Flask-Caching==2.1.0
-
-# WSGI
-uWSGI==2.0.23
