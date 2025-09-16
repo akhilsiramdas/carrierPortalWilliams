@@ -27,11 +27,10 @@ botocore==1.34.34
 
 # File Processing
 pandas==2.1.4
-python-csv==1.0
 openpyxl==3.1.2
 
 # Security & Authentication
-cryptography==41.0.8
+cryptography
 PyJWT==2.8.0
 python-dotenv==1.0.0
 
@@ -57,7 +56,6 @@ sentry-sdk[flask]==1.39.2
 
 # Background Jobs (Optional)
 celery==5.3.4
-redis==5.0.1
 
 # API Documentation
 flasgger==0.9.7.1
