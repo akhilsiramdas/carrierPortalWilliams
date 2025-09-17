@@ -22,14 +22,16 @@ class Config:
     SALESFORCE_CLIENT_ID = os.environ.get('SALESFORCE_CLIENT_ID')
     SALESFORCE_CLIENT_SECRET = os.environ.get('SALESFORCE_CLIENT_SECRET')
     SALESFORCE_REDIRECT_URI = os.environ.get('SALESFORCE_REDIRECT_URI')
-    
+
     # Salesforce Configuration for System-level API access (Server-to-Server)
     # Credentials for a dedicated API user in Salesforce.
     SALESFORCE_USERNAME = os.environ.get('SALESFORCE_USERNAME')
     SALESFORCE_PASSWORD = os.environ.get('SALESFORCE_PASSWORD')
     SALESFORCE_SECURITY_TOKEN = os.environ.get('SALESFORCE_SECURITY_TOKEN')
 
-    # NOTE: SALESFORCE_LOGIN_URL is set in the environment-specific configs below.
+    # The base URL for Salesforce login. This is overridden by environment-specific
+    # configs (e.g., DevelopmentConfig points to test.salesforce.com).
+    SALESFORCE_LOGIN_URL = os.environ.get('SALESFORCE_LOGIN_URL', 'https://login.salesforce.com')
 
     # Firebase Configuration
     # These are obtained from your Firebase project's service account credentials.
